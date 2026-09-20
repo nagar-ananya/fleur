@@ -1,0 +1,6 @@
+ Implement this projeect @requirements/REQUIREMENTS.md
+
+  Do your best to fill in the gaps wherever possible, take reasonable guesses and get the first cut ready.
+
+
+  

@@ -1,0 +1,14 @@
+ml/.venv/
+ml/data/
+ml/out/figures/
+ml/__pycache__/
+ml/**/__pycache__/
+.pytest_cache/
+node_modules/
+.expo/
+dist/
+*.log
+.DS_Store
+app/android/
+app/ios/
+.git-back/

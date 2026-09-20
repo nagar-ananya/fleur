@@ -1,0 +1,106 @@
+{
+  "metrics": {
+    "average_precision": 0.3271235200300579,
+    "roc_auc": 0.7478076708272454,
+    "precision_at_threshold": 0.371900826446281,
+    "recall_at_threshold": 0.3284671532846715,
+    "base_rate": 0.08151527171757239,
+    "n_train_patients": 160,
+    "n_test_patients": 40,
+    "n_train_rows": 19802,
+    "n_test_rows": 5042,
+    "best_C": 0.01,
+    "nonzero_coefficients": 39,
+    "lift_over_base_rate": 4.0130335474247
+  },
+  "cv": {
+    "0.01": 0.36890721804471477,
+    "0.03": 0.3617484107829537,
+    "0.1": 0.35502265386782894,
+    "0.3": 0.3520451715724817,
+    "1.0": 0.3507759372927285,
+    "3.0": 0.35048802379688004
+  },
+  "validation": {
+    "val1": {
+      "top_k": [
+        "pm2_5",
+        "stress",
+        "humidity_mean_pct",
+        "illness",
+        "diet_sugar"
+      ],
+      "k": 5,
+      "mean_precision_at_k": 0.225,
+      "mean_trigger_recall": 0.9583333333333333,
+      "selected_variables": [
+        "alcohol_units",
+        "diet_dairy",
+        "diet_processed",
+        "diet_sugar",
+        "humidity_mean_pct",
+        "illness",
+        "itch",
+        "pm2_5",
+        "pollen_total",
+        "skin_injury",
+        "sleep_hours",
+        "sore_throat",
+        "stress",
+        "temp_delta_1d"
+      ],
+      "selected_precision": 0.7142857142857143,
+      "distractors_selected": [
+        "diet_dairy",
+        "humidity_mean_pct",
+        "itch",
+        "pollen_total"
+      ],
+      "distractors_available": [
+        "diet_dairy",
+        "humidity_mean_pct",
+        "itch",
+        "pollen_total",
+        "uv_index_max"
+      ],
+      "population_top5_overlap": 0.4,
+      "planted_counts": {
+        "stress": 116,
+        "sleep_hours": 91,
+        "illness": 48,
+        "temp_delta_1d": 40,
+        "sore_throat": 40,
+        "pm2_5": 36,
+        "skin_injury": 35,
+        "alcohol_units": 30,
+        "humidity_delta_1d": 18,
+        "diet_sugar": 18,
+        "diet_processed": 15,
+        "pressure_delta_1d": 12
+      },
+      "passes": true
+    },
+    "val2": {
+      "ap_full": 0.3271235200300579,
+      "ap_without_lags": 0.337256058720509,
+      "ap_baseline_only": 0.3448864076138142,
+      "ap_trigger_features_only": 0.1719814973568156,
+      "drop_fraction": -0.030974656574739953,
+      "baseline_share_of_full": 1.0543002459197193,
+      "passes": false
+    },
+    "val3": {
+      "ap_shuffled": 0.09523821955637919,
+      "base_rate": 0.08151527171757239,
+      "ratio": 1.168348182489693,
+      "passes": true
+    },
+    "val4": {
+      "rows_checked": 61,
+      "cells_differing": 0,
+      "leaking_features": [],
+      "future_actually_changed": true,
+      "passes": true
+    }
+  }
+}
