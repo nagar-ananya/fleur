@@ -19,8 +19,8 @@ Section references throughout the code (`§7.3`, `FR-4.2`, `SIM-6`) point back t
 
 | Milestone | State | Evidence |
 |---|---|---|
-| M1 — Simulator | ✅ | 39,400 rows, 9.01% flare rate, 20.9% idiopathic, deterministic under seed |
-| M2 — Model | ⚠️ **partial** | AP 0.327 (4.0× base rate); precision and VAL-2 short — see below |
+| M1 — Simulator | ✅ | 295,500 rows (1500 patients), 9.26% flare rate, 23.9% idiopathic, deterministic under seed |
+| M2 — Model | ⚠️ **partial** | AP 0.391 (3.9× base rate); precision and VAL-2 short — see below |
 | M3 — Export | ✅ | `model.json` validates; all 95 features labelled; **parity test passes** |
 | M4 — App shell | ✅ | Bundles; SQLite migrates (schema v2); 5 tabs; onboarding completable |
 | M5 — Check-in | ✅ | Save/read/backfill/edit all covered by tests; backfill is now its own screen |
@@ -49,7 +49,7 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 python fetch_archive.py     # real 2024 weather for 8 European cities → data/weather_cache.json
-python simulate.py --seed 20260729   # 200 patients × 197 days → data/synthetic_panel.csv
+python simulate.py --seed 20260729   # 1500 patients × 197 days → data/synthetic_panel.csv
 python train.py             # → out/model.json inputs, out/report.md, out/figures/
 python export.py            # → out/model.json + out/parity_fixtures.json, copied to app/assets/
 pytest tests/ -q
@@ -78,12 +78,13 @@ is fully functional without it (HD-2).
 
 ### Simulator (M1)
 
-200 virtual patients × 197 days, built on **real 2024 weather** pulled from the
-Open-Meteo archive for London, Berlin, Madrid, Stockholm, Rome, Warsaw, Dublin
-and Athens — so environmental correlations are genuine rather than noise (SIM-3).
+1500 virtual patients × 197 days (see "Why 1500 patients" below), built on
+**real 2024 weather** pulled from the Open-Meteo archive for London, Berlin,
+Madrid, Stockholm, Rome, Warsaw, Dublin and Athens — so environmental
+correlations are genuine rather than noise (SIM-3).
 
-- **9.01%** flare-positive rate (§8.2 requires 6–12%)
-- **20.9%** of flares idiopathic (SIM-5 targets ~20%)
+- **9.26%** flare-positive rate (§8.2 requires 6–12%)
+- **23.9%** of flares idiopathic (SIM-5 targets ~20%)
 - **15%** of check-in days missing, in runs of 1–4 (SIM-6)
 - Byte-identical output for a fixed seed (SIM-8)
 
@@ -96,38 +97,43 @@ given zero effect.
 
 ### Model (M2)
 
-L1 logistic regression, `C=0.01`, split by patient (160 train / 40 test).
+L1 logistic regression, `C=0.01`, split by patient (1200 train / 300 test).
 
 | Metric | Result | §8.3 target | |
 |---|---|---|---|
-| Average precision | **0.327** | ≥ 0.30 | ✅ |
-| Precision @ threshold | 0.372 | ≥ 0.55 | ❌ |
-| Recall @ threshold | 0.328 | ≥ 0.35 | ❌ |
-| Planted-trigger share | **0.714** | ≥ 0.60 | ✅ |
+| Average precision | **0.391** | ≥ 0.30 | ✅ |
+| Precision @ threshold | 0.453 | ≥ 0.55 | ❌ |
+| Recall @ threshold | 0.349 | ≥ 0.35 | ❌ (0.0007 short) |
+| Planted-trigger share | **0.706** | ≥ 0.60 | ✅ |
 | VAL-1 trigger recovery | pass | | ✅ |
 | VAL-2 leakage | **fail** | | ❌ |
-| VAL-3 null test | pass (1.17× base rate) | | ✅ |
+| VAL-3 null test | pass | | ✅ |
 | VAL-4 temporal sanity | pass | | ✅ |
 
-AP 0.327 against a 0.082 base rate is a **4.0× lift**, and 39 of 95 coefficients
-survive L1.
+AP 0.391 against a 0.099 base rate is a **3.9× lift**, and 71 of 95 coefficients
+survive L1 (up from 39 at N=200 — more patients gives the L1 selector enough
+statistical power to keep real, modest trigger effects instead of regularising
+them away in favour of the one dominant, low-noise signal).
 
 ### The honest part: why VAL-2 fails
 
 This is the most important finding in the project, so it is reported rather than
 tuned away.
 
-| Feature set | Average precision |
-|---|---|
-| All 95 features | 0.327 |
-| `severity_baseline` + `severity_delta` only | **0.345** |
-| Lag + roll features only (no severity terms) | 0.172 |
-| Base rate | 0.082 |
+| Feature set | Average precision (N=200, prior) | Average precision (N=1500, current) |
+|---|---|---|
+| All 95 features | 0.327 | **0.391** |
+| `severity_baseline` + `severity_delta` only | 0.345 | 0.374 |
+| Lag + roll features only (no severity terms) | 0.172 | 0.223 |
+| Base rate | 0.082 | 0.099 |
+| `baseline_share_of_full` (pass needs < 0.90) | **1.054** | **0.957** |
 
-**Two severity terms alone beat the full model.** The trigger features do carry
-real signal — 0.172 against a 0.082 base rate is a 2.1× lift on their own — but
-they add almost nothing on top of knowing where today sits relative to the last
-fortnight.
+**At N=200, the two severity terms alone beat the full model outright** — the
+clearest possible sign that the other 93 features were decoration. At N=1500
+the full model has decisively pulled ahead of that baseline (`0.957` vs. the
+`0.90` VAL-2 needs), and the trigger-only block's own lift over base rate held
+steady (2.1x → 2.25x) while carrying more of the total. The gap narrowed by
+more than half; it did not close.
 
 The cause is structural, in the §8.1 target definition:
 
@@ -141,27 +147,59 @@ is very likely to satisfy the condition tomorrow. The target therefore counts
 flare **continuations**, not just onsets — and continuations are predictable
 from current state without reference to any trigger.
 
-This was chased hard before being accepted. Seven levers were swept — clustering
-lags to the §7.4 latencies, centring the trigger response, severity noise level
-and persistence, flare decay rate, trigger prevalence concentration, and sparse
+This was chased hard before being accepted, across two separate rounds of
+tuning. The first swept seven levers on the *mechanism* — clustering lags to
+the §7.4 latencies, centring the trigger response, severity noise level and
+persistence, flare decay rate, trigger prevalence concentration, and sparse
 threshold-based activation. Two produced real, principled improvements and are
-kept (below). None separated trigger signal from severity momentum while holding
-the flare rate inside the mandated 6–12% band.
+kept (below, "Two simulator bugs"). None separated trigger signal from severity
+momentum while holding the flare rate inside the mandated 6–12% band.
 
-Raising AP further *is* easy — a longer flare decay pushes it to 0.40+ — but
-`AP_baseline_only` rises in lockstep, so the gain is pure momentum-riding and
-VAL-2 correctly rejects it. Optimising the headline number would have meant
-optimising away the thing the project exists to measure.
+The second round asked a different question: is the mechanism actually fine,
+and the model just underpowered? `simulate.py` was left completely untouched —
+same triggers, same lags, same decay, same noise — and only the *amount* of
+data was varied, holding a fixed 200-patient test block and growing the
+training set underneath it:
+
+| Training patients | AP (full model) | `baseline_share_of_full` |
+|---|---|---|
+| 160 | 0.317 | 1.026 |
+| 500 | 0.332 | 0.979 |
+| 1000 | 0.386 | 0.964 |
+| 1500 | 0.386 | 0.962 |
+| 2000 | 0.387 | 0.961 |
+| 2700 | 0.387 | 0.960 |
+
+That is a genuine, monotonic effect — more data lets L1 keep real trigger
+coefficients it would otherwise regularise away — and it is also a genuine
+plateau: 1000 → 2700 patients (2.7x the data, several extra minutes of CPU per
+run) moves the ratio all of `0.004`. Whatever headroom more patients alone can
+buy was captured by roughly 1000–1500; **1500** was adopted as a SPEC-DEVIATION
+from SIM-1/TR-1's literal 200 (see `ml/simulate.py`) because it sits just past
+that knee. Two mechanistic levers were re-tried at this larger scale in case
+more data had changed their effect — a shorter flare decay (0.70 → 0.55,
+recalibrated to hold the flare-rate band) and a lower trigger-activation
+threshold — and both still made the *overall* fit worse (AP fell to the
+0.22–0.30 range) for no consistent gain on the ratio, so neither was kept.
+
+Raising AP further by weakening the mechanism *is* easy — a longer flare decay
+pushed an earlier N=200 test to 0.40+ — but `AP_baseline_only` rose in lockstep
+every time, so the gain was pure momentum-riding and VAL-2 correctly rejected
+it. Optimising the headline number would have meant optimising away the thing
+the project exists to measure.
 
 **Consequence for the product:** the Insights screen still shows genuinely
 recovered triggers (VAL-1 passes; 71% of selected trigger variables were really
-planted). But the Today screen's number is driven mostly by recent severity
-trajectory. The risk-detail copy says so in plain language rather than implying
+planted). But the Today screen's number is still driven mostly by recent
+severity trajectory, now with a smaller (not zero) margin from real triggers
+on top. The risk-detail copy says so in plain language rather than implying
 the triggers are doing more work than they are.
 
-Two fixes worth trying next: define the target on flare *onset* only (excluding
-days already above baseline + 3), and score per-patient rather than shipping one
-population model — though §2 rules the latter out for v1.
+Two fixes worth trying next, neither attempted here: define the target on
+flare *onset* only (excluding days already above baseline + 3), which would
+cut directly at the continuation-vs-onset conflation above; and score
+per-patient rather than shipping one population model — though §2 rules the
+latter out for v1.
 
 ### Two simulator bugs this surfaced
 

@@ -1,60 +1,64 @@
 {
   "metrics": {
-    "average_precision": 0.3271235200300579,
-    "roc_auc": 0.7478076708272454,
-    "precision_at_threshold": 0.371900826446281,
-    "recall_at_threshold": 0.3284671532846715,
-    "base_rate": 0.08151527171757239,
-    "n_train_patients": 160,
-    "n_test_patients": 40,
-    "n_train_rows": 19802,
-    "n_test_rows": 5042,
+    "average_precision": 0.3904668652482003,
+    "roc_auc": 0.7630290760049737,
+    "precision_at_threshold": 0.4529226461323066,
+    "recall_at_threshold": 0.3492577597840756,
+    "base_rate": 0.09903769045709704,
+    "n_train_patients": 1200,
+    "n_test_patients": 300,
+    "n_train_rows": 148418,
+    "n_test_rows": 37410,
     "best_C": 0.01,
-    "nonzero_coefficients": 39,
-    "lift_over_base_rate": 4.0130335474247
+    "nonzero_coefficients": 71,
+    "lift_over_base_rate": 3.942608752749034
   },
   "cv": {
-    "0.01": 0.36890721804471477,
-    "0.03": 0.3617484107829537,
-    "0.1": 0.35502265386782894,
-    "0.3": 0.3520451715724817,
-    "1.0": 0.3507759372927285,
-    "3.0": 0.35048802379688004
+    "0.01": 0.3782772143164,
+    "0.03": 0.37726176064964045,
+    "0.1": 0.376692467687637,
+    "0.3": 0.37647465020134174,
+    "1.0": 0.3763897547648458,
+    "3.0": 0.3763665158498789
   },
   "validation": {
     "val1": {
       "top_k": [
-        "pm2_5",
         "stress",
-        "humidity_mean_pct",
+        "pm2_5",
         "illness",
-        "diet_sugar"
+        "alcohol_units",
+        "sleep_hours"
       ],
       "k": 5,
-      "mean_precision_at_k": 0.225,
-      "mean_trigger_recall": 0.9583333333333333,
+      "mean_precision_at_k": 0.322,
+      "mean_trigger_recall": 1.0,
       "selected_variables": [
         "alcohol_units",
         "diet_dairy",
         "diet_processed",
         "diet_sugar",
+        "humidity_delta_1d",
         "humidity_mean_pct",
         "illness",
         "itch",
         "pm2_5",
         "pollen_total",
+        "pressure_delta_1d",
         "skin_injury",
         "sleep_hours",
         "sore_throat",
         "stress",
-        "temp_delta_1d"
+        "temp_delta_1d",
+        "uv_index_max"
       ],
-      "selected_precision": 0.7142857142857143,
+      "selected_precision": 0.7058823529411765,
       "distractors_selected": [
         "diet_dairy",
         "humidity_mean_pct",
         "itch",
-        "pollen_total"
+        "pollen_total",
+        "uv_index_max"
       ],
       "distractors_available": [
         "diet_dairy",
@@ -63,36 +67,36 @@
         "pollen_total",
         "uv_index_max"
       ],
-      "population_top5_overlap": 0.4,
+      "population_top5_overlap": 0.8,
       "planted_counts": {
-        "stress": 116,
-        "sleep_hours": 91,
-        "illness": 48,
-        "temp_delta_1d": 40,
-        "sore_throat": 40,
-        "pm2_5": 36,
-        "skin_injury": 35,
-        "alcohol_units": 30,
-        "humidity_delta_1d": 18,
-        "diet_sugar": 18,
-        "diet_processed": 15,
-        "pressure_delta_1d": 12
+        "stress": 800,
+        "sleep_hours": 680,
+        "illness": 396,
+        "alcohol_units": 330,
+        "temp_delta_1d": 309,
+        "skin_injury": 299,
+        "pm2_5": 246,
+        "sore_throat": 196,
+        "humidity_delta_1d": 150,
+        "diet_processed": 126,
+        "pressure_delta_1d": 94,
+        "diet_sugar": 90
       },
       "passes": true
     },
     "val2": {
-      "ap_full": 0.3271235200300579,
-      "ap_without_lags": 0.337256058720509,
-      "ap_baseline_only": 0.3448864076138142,
-      "ap_trigger_features_only": 0.1719814973568156,
-      "drop_fraction": -0.030974656574739953,
-      "baseline_share_of_full": 1.0543002459197193,
+      "ap_full": 0.3904668652482003,
+      "ap_without_lags": 0.38684011154117476,
+      "ap_baseline_only": 0.3734643746512578,
+      "ap_trigger_features_only": 0.22325675694909175,
+      "drop_fraction": 0.00928824960530309,
+      "baseline_share_of_full": 0.9564559963720998,
       "passes": false
     },
     "val3": {
-      "ap_shuffled": 0.09523821955637919,
-      "base_rate": 0.08151527171757239,
-      "ratio": 1.168348182489693,
+      "ap_shuffled": 0.08897097028345155,
+      "base_rate": 0.09903769045709704,
+      "ratio": 0.8983546554126646,
       "passes": true
     },
     "val4": {

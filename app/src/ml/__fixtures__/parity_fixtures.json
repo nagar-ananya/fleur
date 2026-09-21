@@ -1,6 +1,6 @@
 {
   "model_version": "1.0.0",
-  "threshold": 0.2128,
+  "threshold": 0.2215,
   "generated_from": "ml/export.py",
   "fixtures": [
     {
@@ -951,20 +951,20 @@
         "humidity_mean_pct": 69.833,
         "uv_index_max": 4.35
       },
-      "expected_probability": 0.0702227757,
+      "expected_probability": 0.0727274567,
       "expected_band": "low",
       "expected_top_contributions": [
         {
           "name": "severity_delta",
-          "contribution": 0.422354
-        },
-        {
-          "name": "stress_roll3",
-          "contribution": 0.106527
+          "contribution": 0.426927
         },
         {
           "name": "severity_baseline",
-          "contribution": 0.087444
+          "contribution": 0.254045
+        },
+        {
+          "name": "stress_roll3",
+          "contribution": 0.144456
         }
       ]
     },
@@ -1916,20 +1916,20 @@
         "humidity_mean_pct": 29.417,
         "uv_index_max": 9.85
       },
-      "expected_probability": 0.0519776134,
+      "expected_probability": 0.0656061352,
       "expected_band": "low",
       "expected_top_contributions": [
         {
           "name": "severity_baseline",
-          "contribution": 0.11924
+          "contribution": 0.343419
         },
         {
           "name": "severity_delta",
-          "contribution": 0.115839
+          "contribution": 0.11759
         },
         {
           "name": "alcohol_units_lag3",
-          "contribution": 0.111082
+          "contribution": 0.108386
         }
       ]
     },
@@ -2855,20 +2855,20 @@
         "humidity_mean_pct": 82.0,
         "uv_index_max": 3.4
       },
-      "expected_probability": 0.020647299,
+      "expected_probability": 0.0193249336,
       "expected_band": "low",
       "expected_top_contributions": [
         {
-          "name": "humidity_mean_pct",
-          "contribution": 0.100676
-        },
-        {
           "name": "stress_roll3",
-          "contribution": 0.094528
+          "contribution": 0.128529
         },
         {
-          "name": "diet_sugar_lag3",
-          "contribution": 0.086547
+          "name": "alcohol_units_roll14",
+          "contribution": 0.11063
+        },
+        {
+          "name": "diet_processed_lag3",
+          "contribution": 0.105264
         }
       ]
     },
@@ -3820,20 +3820,20 @@
         "humidity_mean_pct": 38.25,
         "uv_index_max": 7.25
       },
-      "expected_probability": 0.0536448665,
+      "expected_probability": 0.0549317312,
       "expected_band": "low",
       "expected_top_contributions": [
         {
           "name": "severity_baseline",
-          "contribution": 0.105613
+          "contribution": 0.305116
         },
         {
           "name": "stress_roll3",
-          "contribution": 0.094528
+          "contribution": 0.128529
         },
         {
-          "name": "diet_sugar_lag3",
-          "contribution": 0.086547
+          "name": "alcohol_units_roll3",
+          "contribution": 0.112134
         }
       ]
     },
@@ -4785,20 +4785,20 @@
         "humidity_mean_pct": 47.458,
         "uv_index_max": 4.05
       },
-      "expected_probability": 0.0441369656,
+      "expected_probability": 0.0453005515,
       "expected_band": "low",
       "expected_top_contributions": [
         {
-          "name": "sleep_debt_7d",
-          "contribution": 0.204993
-        },
-        {
-          "name": "diet_sugar_lag3",
-          "contribution": 0.086547
-        },
-        {
           "name": "alcohol_units_roll3",
-          "contribution": 0.072312
+          "contribution": 0.197931
+        },
+        {
+          "name": "sleep_debt_7d",
+          "contribution": 0.191375
+        },
+        {
+          "name": "severity_baseline",
+          "contribution": 0.113601
         }
       ]
     },
@@ -5750,20 +5750,20 @@
         "humidity_mean_pct": 23.25,
         "uv_index_max": 9.0
       },
-      "expected_probability": 0.00512826,
+      "expected_probability": 0.0057796218,
       "expected_band": "low",
       "expected_top_contributions": [
         {
+          "name": "sleep_hours_roll14",
+          "contribution": 0.182753
+        },
+        {
           "name": "stress_roll3",
-          "contribution": 0.07053
+          "contribution": 0.096675
         },
         {
-          "name": "itch_roll3",
-          "contribution": 0.026905
-        },
-        {
-          "name": "illness_lag14",
-          "contribution": 0.014774
+          "name": "humidity_mean_pct_lag1",
+          "contribution": 0.086196
         }
       ]
     },
@@ -6715,20 +6715,20 @@
         "humidity_mean_pct": 84.792,
         "uv_index_max": 3.9
       },
-      "expected_probability": 0.0419093492,
+      "expected_probability": 0.034784244,
       "expected_band": "low",
       "expected_top_contributions": [
         {
           "name": "alcohol_units_roll3",
-          "contribution": 0.127945
+          "contribution": 0.355227
         },
         {
-          "name": "humidity_mean_pct",
-          "contribution": 0.117502
+          "name": "severity_baseline",
+          "contribution": 0.126369
         },
         {
           "name": "stress_roll14",
-          "contribution": 0.064015
+          "contribution": 0.081696
         }
       ]
     },
@@ -7680,20 +7680,20 @@
         "humidity_mean_pct": 36.917,
         "uv_index_max": 10.25
       },
-      "expected_probability": 0.0877054035,
-      "expected_band": "low",
+      "expected_probability": 0.1465016639,
+      "expected_band": "elevated",
       "expected_top_contributions": [
         {
           "name": "illness_lag7",
-          "contribution": 0.445447
+          "contribution": 0.626079
         },
         {
           "name": "severity_baseline",
-          "contribution": 0.090938
+          "contribution": 0.263867
         },
         {
-          "name": "diet_sugar_lag3",
-          "contribution": 0.086547
+          "name": "diet_processed_lag3",
+          "contribution": 0.105264
         }
       ]
     },
@@ -8645,20 +8645,20 @@
         "humidity_mean_pct": 34.167,
         "uv_index_max": 9.8
       },
-      "expected_probability": 0.0099534815,
+      "expected_probability": 0.0091569636,
       "expected_band": "low",
       "expected_top_contributions": [
         {
-          "name": "diet_sugar_lag3",
-          "contribution": 0.086547
+          "name": "stress_lag14",
+          "contribution": 0.121222
         },
         {
-          "name": "diet_dairy_lag7",
-          "contribution": 0.057074
+          "name": "alcohol_units_roll3",
+          "contribution": 0.069235
         },
         {
-          "name": "diet_dairy_lag1",
-          "contribution": 0.050053
+          "name": "sleep_hours_roll14",
+          "contribution": 0.062604
         }
       ]
     },
@@ -9610,20 +9610,20 @@
         "humidity_mean_pct": 45.458,
         "uv_index_max": 8.5
       },
-      "expected_probability": 0.0596400361,
+      "expected_probability": 0.0623052241,
       "expected_band": "low",
       "expected_top_contributions": [
         {
           "name": "sleep_debt_7d",
-          "contribution": 0.448226
-        },
-        {
-          "name": "sleep_hours_roll7",
-          "contribution": 0.134043
+          "contribution": 0.42132
         },
         {
           "name": "sleep_hours_lag3",
-          "contribution": 0.106007
+          "contribution": 0.215112
+        },
+        {
+          "name": "alcohol_units_roll3",
+          "contribution": 0.197931
         }
       ]
     }

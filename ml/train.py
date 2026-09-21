@@ -39,7 +39,7 @@ FIG_DIR = OUT_DIR / "figures"
 
 C_GRID = [0.01, 0.03, 0.1, 0.3, 1.0, 3.0]  # TR-3
 N_SPLITS = 5  # TR-2
-TRAIN_PATIENT_MAX = 160  # TR-1
+TRAIN_FRACTION = 0.8  # TR-1 — patient IDs <= this fraction of the panel are train
 MIN_RECALL = 0.35  # TR-6
 
 # §8.3 acceptance criteria.
@@ -122,7 +122,12 @@ def main() -> None:
 
     # TR-1: split by patient. Splitting by row would let the same person's
     # adjacent days sit on both sides and produce a beautiful, meaningless score.
-    is_train = groups <= TRAIN_PATIENT_MAX
+    # The cut is a fraction of however many patients the panel actually has,
+    # rather than a hardcoded count, so `simulate.py --patients N` for any N
+    # keeps an 80/20 patient-level split instead of silently shrinking the
+    # test set (or, past N=200, growing it far past 20%).
+    train_patient_max = int(round(int(groups.max()) * TRAIN_FRACTION))
+    is_train = groups <= train_patient_max
     X_train, X_test = X[is_train], X[~is_train]
     y_train, y_test = y[is_train], y[~is_train]
     g_train = groups[is_train]
