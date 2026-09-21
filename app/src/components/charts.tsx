@@ -6,8 +6,15 @@
  * a text label or an accessibility label.
  */
 
-import React, { useEffect, useId, useMemo, useRef } from 'react';
-import { Animated, Easing, View, type StyleProp, type ViewStyle } from 'react-native';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  Easing,
+  PanResponder,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import Svg, {
   Circle,
   Defs,
@@ -20,230 +27,11 @@ import Svg, {
 } from 'react-native-svg';
 
 import { useTheme } from '../hooks/useTheme';
-import { bandStyle, radius, spacing, type Gradient, type Palette } from '../theme';
-import type { RiskBand } from '../types/models';
+import { radius, severityWord, spacing, type Gradient, type Palette } from '../theme';
+import { formatShort } from '../utils/dates';
 import { GradientFill } from './gradient';
 import { PressableScale } from './motion';
 import { Txt } from './primitives';
-
-const AnimatedPath = Animated.createAnimatedComponent(Path);
-
-// react-native-svg types stroke props as NumberProp, which an Animated value is
-// not assignable to even though the library handles it. One narrow cast here
-// keeps every call site clean, and avoids `any` entirely (§16).
-type StrokeValue = Animated.AnimatedInterpolation<number> | Animated.Value;
-const asStroke = (value: StrokeValue): number => value as unknown as number;
-
-// --------------------------------------------------------------------------
-// Geometry
-// --------------------------------------------------------------------------
-
-/** Gauge sweep: 270°, starting bottom-left, leaving a 90° gap at the bottom. */
-const DIAL_START = 135;
-const DIAL_SWEEP = 270;
-
-function polar(cx: number, cy: number, r: number, degrees: number) {
-  const rad = (degrees * Math.PI) / 180;
-  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
-}
-
-function arc(cx: number, cy: number, r: number, from: number, to: number): string {
-  const start = polar(cx, cy, r, from);
-  const end = polar(cx, cy, r, to);
-  const large = Math.abs(to - from) > 180 ? 1 : 0;
-  const sweep = to > from ? 1 : 0;
-  return `M ${start.x} ${start.y} A ${r} ${r} 0 ${large} ${sweep} ${end.x} ${end.y}`;
-}
-
-/**
- * Band boundaries as a fraction of the dial. The dial tops out at 1.5x the
- * model threshold, so these are constant: low occupies 40%, elevated the next
- * 26.7%, high the last third. The needle can therefore never disagree with
- * the band label.
- */
-const LOW_END = 0.4;
-const ELEVATED_END = 2 / 3;
-
-// --------------------------------------------------------------------------
-// Risk dial
-// --------------------------------------------------------------------------
-
-export function RiskDial({
-  probability,
-  band,
-  threshold,
-  size = 260,
-  children,
-}: {
-  probability: number;
-  band: RiskBand;
-  threshold: number;
-  size?: number;
-  children?: React.ReactNode;
-}): React.ReactElement {
-  const { palette } = useTheme();
-  const style = bandStyle(band, palette);
-  const gradientId = useId().replace(/:/g, '');
-
-  const strokeWidth = 20;
-  const r = (size - strokeWidth) / 2 - 4;
-  const cx = size / 2;
-  const cy = r + strokeWidth / 2 + 4;
-  const height = cy + r * Math.sin((DIAL_START * Math.PI) / 180) + strokeWidth / 2 + 6;
-
-  const ceiling = threshold * 1.5;
-  const fraction = Math.min(Math.max(probability / ceiling, 0), 1);
-  const arcLength = 2 * Math.PI * r * (DIAL_SWEEP / 360);
-
-  const progress = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const animation = Animated.timing(progress, {
-      toValue: fraction,
-      duration: 1100,
-      easing: Easing.out(Easing.cubic),
-      // SVG stroke props cannot run on the native driver.
-      useNativeDriver: false,
-    });
-    animation.start();
-    return () => animation.stop();
-  }, [fraction, progress]);
-
-  const dashOffset = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [arcLength, 0],
-  });
-
-  const zone = (from: number, to: number): string =>
-    arc(cx, cy, r, DIAL_START + from * DIAL_SWEEP, DIAL_START + to * DIAL_SWEEP);
-
-  return (
-    <View style={{ width: size, height }}>
-      <Svg width={size} height={height}>
-        <Defs>
-          <LinearGradient id={gradientId} x1="0" y1="1" x2="1" y2="0">
-            <Stop offset="0" stopColor={style.gradient.from} />
-            <Stop offset="1" stopColor={style.gradient.to} />
-          </LinearGradient>
-        </Defs>
-
-        {/* Band zones, drawn faintly so the scale is readable at a glance. */}
-        <Path d={zone(0, LOW_END - 0.006)} stroke={palette.bandLowSoft} strokeWidth={strokeWidth} strokeLinecap="round" fill="none" />
-        <Path d={zone(LOW_END + 0.006, ELEVATED_END - 0.006)} stroke={palette.bandElevatedSoft} strokeWidth={strokeWidth} fill="none" />
-        <Path d={zone(ELEVATED_END + 0.006, 1)} stroke={palette.bandHighSoft} strokeWidth={strokeWidth} strokeLinecap="round" fill="none" />
-
-        {/* The value, sweeping up from zero on mount. */}
-        <AnimatedPath
-          d={zone(0, 1)}
-          stroke={`url(#${gradientId})`}
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-          fill="none"
-          strokeDasharray={arcLength}
-          strokeDashoffset={asStroke(dashOffset)}
-        />
-      </Svg>
-
-      <View
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: size,
-          height,
-          alignItems: 'center',
-          justifyContent: 'center',
-          paddingBottom: r * 0.32,
-        }}
-        pointerEvents="none"
-      >
-        {children}
-      </View>
-    </View>
-  );
-}
-
-/**
- * The pre-forecast state, on the same dial so the two never feel like
- * different screens: one dot per required day, filled as they are logged.
- *
- * A bare "0 of 14" gave the user nothing to feel progress against. Fourteen
- * dots that fill in one at a time turn the two-week cold start into something
- * legible.
- */
-export function ProgressDial({
-  current,
-  total,
-  size = 260,
-  children,
-}: {
-  current: number;
-  total: number;
-  size?: number;
-  children?: React.ReactNode;
-}): React.ReactElement {
-  const { palette } = useTheme();
-  const dotRadius = 7;
-  const r = size / 2 - dotRadius - 8;
-  const cx = size / 2;
-  const cy = r + dotRadius + 8;
-  const height = cy + r * Math.sin((DIAL_START * Math.PI) / 180) + dotRadius + 10;
-
-  const appear = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    const animation = Animated.timing(appear, {
-      toValue: 1,
-      duration: 700,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    });
-    animation.start();
-    return () => animation.stop();
-  }, [appear]);
-
-  return (
-    <Animated.View style={{ width: size, height, opacity: appear }}>
-      <Svg width={size} height={height}>
-        <Path
-          d={arc(cx, cy, r, DIAL_START, DIAL_START + DIAL_SWEEP)}
-          stroke={palette.surfaceAlt}
-          strokeWidth={2}
-          fill="none"
-        />
-        {Array.from({ length: total }, (_, i) => {
-          const t = total === 1 ? 0 : i / (total - 1);
-          const point = polar(cx, cy, r, DIAL_START + t * DIAL_SWEEP);
-          const done = i < current;
-          return (
-            <Circle
-              key={i}
-              cx={point.x}
-              cy={point.y}
-              r={done ? dotRadius : dotRadius - 2.5}
-              fill={done ? palette.primary : palette.surfaceAlt}
-              stroke={done ? palette.primary : palette.border}
-              strokeWidth={1.5}
-            />
-          );
-        })}
-      </Svg>
-      <View
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: size,
-          height,
-          alignItems: 'center',
-          justifyContent: 'center',
-          paddingBottom: r * 0.3,
-        }}
-        pointerEvents="none"
-      >
-        {children}
-      </View>
-    </Animated.View>
-  );
-}
 
 // --------------------------------------------------------------------------
 // Trend
@@ -260,29 +48,73 @@ export interface TrendPoint {
  * Gaps stay gaps: consecutive logged days are joined, missing days break the
  * line rather than being bridged by one that implies data we do not have.
  */
+/** Nearest sample to a touch, for the scrubber. Pure, so it is testable. */
+export function nearestIndex(x: number, width: number, count: number): number {
+  if (count <= 1 || width <= 0) return 0;
+  const step = width / (count - 1);
+  return Math.min(count - 1, Math.max(0, Math.round(x / step)));
+}
+
 export function TrendChart({
   points,
   height = 96,
   max = 10,
   gradient,
   showDots = true,
+  interactive = false,
 }: {
   points: readonly TrendPoint[];
   height?: number;
   max?: number;
   gradient?: Gradient;
   showDots?: boolean;
+  /** Touch or drag to read individual days; the reading persists after release. */
+  interactive?: boolean;
 }): React.ReactElement {
   const { palette } = useTheme();
   const [width, setWidth] = React.useState(0);
+  const [selected, setSelected] = useState<number | null>(null);
   const fillId = useId().replace(/:/g, '');
   const lineId = useId().replace(/:/g, '');
   const ramp = gradient ?? palette.gradients.trend;
 
-  const top = 10;
+  // Room above the line for the readout when the chart is interactive.
+  const top = interactive ? 34 : 10;
   const bottom = height - 14;
   const step = points.length > 1 ? width / (points.length - 1) : 0;
   const yFor = (value: number): number => bottom - (value / max) * (bottom - top);
+
+  const widthRef = useRef(0);
+  const countRef = useRef(points.length);
+  countRef.current = points.length;
+  const selectedRef = useRef<number | null>(null);
+
+  const responder = useMemo(() => {
+    const scrub = (x: number): void => {
+      const index = nearestIndex(x, widthRef.current, countRef.current);
+      if (index !== selectedRef.current) {
+        selectedRef.current = index;
+        setSelected(index);
+      }
+    };
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => interactive,
+      onMoveShouldSetPanResponder: () => interactive,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: (event) => scrub(event.nativeEvent.locationX),
+      onPanResponderMove: (event) => scrub(event.nativeEvent.locationX),
+    });
+  }, [interactive]);
+
+  // A new data window invalidates the selection. Keyed on content, not array
+  // identity: callers map fresh arrays on every render, and an identity key
+  // would reset the selection in response to the very re-render selecting
+  // something causes.
+  const signature = points.map((p) => `${p.date}:${p.value ?? ''}`).join('|');
+  useEffect(() => {
+    selectedRef.current = null;
+    setSelected(null);
+  }, [signature]);
 
   const { segments, areas, dots } = useMemo(() => {
     const segs: string[] = [];
@@ -323,10 +155,29 @@ export function TrendChart({
     return { segments: segs, areas: ars, dots: ds };
   }, [points, step, bottom, top, max, width]);
 
+  const active = selected !== null && selected < points.length ? points[selected] : null;
+  const activeX = selected !== null ? selected * step : 0;
+  const tooltipWidth = 132;
+  const tooltipLeft = Math.min(Math.max(activeX - tooltipWidth / 2, 0), Math.max(width - tooltipWidth, 0));
+
   return (
-    <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ height }}>
+    <View
+      onLayout={(e) => {
+        widthRef.current = e.nativeEvent.layout.width;
+        setWidth(e.nativeEvent.layout.width);
+      }}
+      style={{ height }}
+      {...(interactive ? responder.panHandlers : {})}
+      accessibilityLabel={
+        active
+          ? `${formatShort(active.date)}: ${
+              active.value === null ? 'no entry' : `severity ${active.value}, ${severityWord(active.value)}`
+            }`
+          : undefined
+      }
+    >
       {width > 0 ? (
-        <Svg width={width} height={height}>
+        <Svg width={width} height={height} pointerEvents="none">
           <Defs>
             <LinearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
               <Stop offset="0" stopColor={ramp.from} stopOpacity={0.32} />
@@ -365,7 +216,65 @@ export function TrendChart({
                 />
               ))
             : null}
+
+          {/* Scrubber: a dashed guide line down to the axis and a ring on the sample. */}
+          {active ? (
+            <G>
+              <Line
+                x1={activeX}
+                y1={top - 6}
+                x2={activeX}
+                y2={bottom}
+                stroke={palette.borderStrong}
+                strokeWidth={1.2}
+                strokeDasharray="3 3"
+              />
+              {active.value !== null ? (
+                <>
+                  <Circle cx={activeX} cy={yFor(active.value)} r={9} fill={ramp.to} opacity={0.18} />
+                  <Circle
+                    cx={activeX}
+                    cy={yFor(active.value)}
+                    r={5}
+                    fill={palette.surface}
+                    stroke={ramp.to}
+                    strokeWidth={2.4}
+                  />
+                </>
+              ) : null}
+            </G>
+          ) : null}
         </Svg>
+      ) : null}
+
+      {active ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: tooltipLeft,
+            width: tooltipWidth,
+            alignItems: 'center',
+            backgroundColor: palette.surfaceAlt,
+            borderRadius: radius.sm,
+            paddingVertical: 4,
+            paddingHorizontal: spacing.sm,
+          }}
+        >
+          <Txt variant="micro" tone="faint" style={{ textTransform: 'uppercase' }}>
+            {formatShort(active.date)}
+          </Txt>
+          <Txt variant="label" style={{ color: active.value === null ? palette.textFaint : palette.text }}>
+            {active.value === null ? 'No entry' : `${active.value} · ${severityWord(active.value)}`}
+          </Txt>
+        </View>
+      ) : interactive ? (
+        <View pointerEvents="none" style={{ position: 'absolute', top: 6, right: 0 }}>
+          <Txt variant="caption" tone="faint">
+            Touch to read a day
+          </Txt>
+        </View>
       ) : null}
     </View>
   );

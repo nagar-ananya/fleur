@@ -5,14 +5,19 @@
  * is the whole argument for L1 logistic regression in §8.4. The preamble in
  * §11.4 is required verbatim, and §13.4 forbids ever calling anything "your #1
  * trigger".
+ *
+ * v2 redesign additions: tapping a bar now opens the dedicated `/factor-detail`
+ * screen (was an in-page bottom sheet); a static lag-reference table; and a
+ * real elimination test (`useEliminationTest`) rather than a decorative card.
  */
 
-import React, { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import React, { useMemo } from 'react';
+import { View } from 'react-native';
 
-import { DivergingBars, LagTimeline, type FactorBar } from '../../src/components/charts';
-import { InfoIcon, SparkIcon } from '../../src/components/icons';
-import { Reveal } from '../../src/components/motion';
+import { DivergingBars, type FactorBar } from '../../src/components/charts';
+import { FlaskIcon, InfoIcon, SparkIcon } from '../../src/components/icons';
+import { PressableScale, Reveal } from '../../src/components/motion';
 import {
   Button,
   Card,
@@ -23,21 +28,25 @@ import {
   StatTile,
   Txt,
 } from '../../src/components/primitives';
-import {
-  INSIGHTS_PREAMBLE,
-  INSIGHTS_SUBTITLE,
-  baseVariable,
-  explanationFor,
-} from '../../src/constants/copy';
+import { INSIGHTS_PREAMBLE, INSIGHTS_SUBTITLE } from '../../src/constants/copy';
+import { ELIMINATION_CANDIDATES, useEliminationTest } from '../../src/hooks/useEliminationTest';
 import { model } from '../../src/hooks/appState';
 import { useTheme } from '../../src/hooks/useTheme';
-import { radius, spacing } from '../../src/theme';
+import { spacing } from '../../src/theme';
 
 const TOP_N = 8; // FR-5.1
 
+const LAG_REFERENCE: readonly { name: string; days: string }[] = [
+  { name: 'Cold snap / humidity drop', days: '1–3 days' },
+  { name: 'Sleep deprivation', days: '3–7 days' },
+  { name: 'Psychological stress', days: '7–14 days' },
+  { name: 'Skin injury (Koebner)', days: '10–14 days' },
+  { name: 'Streptococcal sore throat', days: '14–21 days' },
+];
+
 export default function InsightsScreen(): React.ReactElement {
   const { palette } = useTheme();
-  const [selected, setSelected] = useState<FactorBar | null>(null);
+  const router = useRouter();
 
   // FR-5.1: top 8 by absolute standardised coefficient. Renders correctly when
   // the model has fewer than 8 nonzero coefficients (§11.4).
@@ -98,12 +107,50 @@ export default function InsightsScreen(): React.ReactElement {
               strong regularisation.
             </Txt>
           ) : (
-            <DivergingBars bars={bars} onSelect={setSelected} />
+            <DivergingBars
+              bars={bars}
+              onSelect={(bar) =>
+                router.push({ pathname: '/factor-detail', params: { name: bar.name, label: bar.label } })
+              }
+            />
           )}
         </Card>
       </Reveal>
 
-      <Reveal delay={200}>
+      <Reveal delay={190}>
+        <Kicker style={{ marginTop: spacing.xl, marginBottom: spacing.sm }}>
+          Typical lag · trigger to flare
+        </Kicker>
+        <Card>
+          {LAG_REFERENCE.map((row, index) => (
+            <View
+              key={row.name}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.md,
+                paddingVertical: spacing.sm,
+                borderTopWidth: index === 0 ? 0 : 1,
+                borderTopColor: palette.border,
+              }}
+            >
+              <View style={{ width: 2, height: 16, borderRadius: 1, backgroundColor: palette.primary }} />
+              <Txt style={{ flex: 1 }}>{row.name}</Txt>
+              <Txt variant="caption" tone="accent">
+                {row.days}
+              </Txt>
+            </View>
+          ))}
+          <Txt variant="caption" tone="faint" style={{ marginTop: spacing.md, lineHeight: 18 }}>
+            The model looks back 14 days, so the 14–21 day streptococcal window is only partly
+            covered — a documented limitation.
+          </Txt>
+        </Card>
+      </Reveal>
+
+      <EliminationTestCard bars={bars} />
+
+      <Reveal delay={280}>
         <Card style={{ marginTop: spacing.lg }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
             <IconBadge background={palette.aquaSoft} size={34}>
@@ -139,104 +186,119 @@ export default function InsightsScreen(): React.ReactElement {
       </Reveal>
 
       <ShortDisclaimer />
-
-      {/* FR-5.4: tapping a bar opens a detail sheet. */}
-      <Modal
-        visible={selected !== null}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setSelected(null)}
-      >
-        <Pressable
-          style={{ flex: 1, backgroundColor: 'rgba(10,6,24,0.45)', justifyContent: 'flex-end' }}
-          onPress={() => setSelected(null)}
-          accessibilityRole="button"
-          accessibilityLabel="Close"
-        >
-          <Pressable
-            onPress={(event) => event.stopPropagation()}
-            style={{
-              backgroundColor: palette.surface,
-              borderTopLeftRadius: radius.xl,
-              borderTopRightRadius: radius.xl,
-              paddingTop: spacing.md,
-              maxHeight: '86%',
-            }}
-          >
-            <View
-              style={{
-                alignSelf: 'center',
-                width: 40,
-                height: 4,
-                borderRadius: 2,
-                backgroundColor: palette.borderStrong,
-                marginBottom: spacing.md,
-              }}
-            />
-            {selected ? <FactorSheet bar={selected} onClose={() => setSelected(null)} /> : null}
-          </Pressable>
-        </Pressable>
-      </Modal>
     </Screen>
   );
 }
 
-function FactorSheet({
-  bar,
-  onClose,
-}: {
-  bar: FactorBar;
-  onClose: () => void;
-}): React.ReactElement {
+/**
+ * Genuinely functional: picks a candidate from the current top drivers
+ * (never an unrelated variable), starts/tracks a real 14-day test, and
+ * compares real logged severity across the two halves once it completes.
+ */
+function EliminationTestCard({ bars }: { bars: readonly FactorBar[] }): React.ReactElement | null {
   const { palette } = useTheme();
-  const explanation = explanationFor(baseVariable(bar.name));
-  const raises = bar.direction === 'increases';
-  const tint = raises ? palette.bandHighText : palette.bandLowText;
-  const soft = raises ? palette.bandHighSoft : palette.bandLowSoft;
+  const { state, loaded, start, clear } = useEliminationTest();
+
+  const candidate = useMemo(() => {
+    for (const bar of bars) {
+      const match = ELIMINATION_CANDIDATES[bar.name];
+      if (match) return { variable: bar.name, label: match };
+    }
+    return null;
+  }, [bars]);
+
+  if (!loaded) return null;
+  if (state.status === 'none' && !candidate) return null;
 
   return (
-    <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingTop: spacing.sm }}>
-      <View
+    <Reveal delay={230}>
+      <Card
         style={{
-          alignSelf: 'flex-start',
-          backgroundColor: soft,
-          borderRadius: radius.pill,
-          paddingHorizontal: spacing.md,
-          paddingVertical: 6,
-          marginBottom: spacing.md,
+          marginTop: spacing.lg,
+          borderColor: palette.primary,
+          borderWidth: 1,
+          backgroundColor: palette.primarySoft,
         }}
       >
-        <Txt variant="caption" style={{ color: tint, fontWeight: '600' }}>
-          {raises ? 'Associated with higher risk' : 'Associated with lower risk'}
-        </Txt>
-      </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+          <IconBadge background={palette.surface} size={34}>
+            <FlaskIcon size={17} color={palette.primary} />
+          </IconBadge>
+          <Kicker tone="accent">Elimination test</Kicker>
+        </View>
 
-      <Txt variant="title">{bar.label}</Txt>
+        {state.status === 'none' && candidate ? (
+          <>
+            <Txt variant="heading" style={{ marginTop: spacing.md }}>
+              {`Test ${candidate.label.toLowerCase()} for two weeks`}
+            </Txt>
+            <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 20 }}>
+              One week logging as usual, one week without. Fleur compares your own average
+              severity across both — not a controlled trial, but the most direct thing you can
+              do with your own data.
+            </Txt>
+            <Button
+              label="Start the test"
+              onPress={() => start(candidate.variable, candidate.label)}
+              style={{ marginTop: spacing.lg }}
+            />
+          </>
+        ) : null}
 
-      <Txt tone="muted" style={{ marginTop: spacing.lg, lineHeight: 23 }}>
-        {explanation.description}
-      </Txt>
+        {state.status === 'running' ? (
+          <>
+            <Txt variant="heading" style={{ marginTop: spacing.md }}>
+              {`Testing ${state.label.toLowerCase()} · day ${state.day} of 14`}
+            </Txt>
+            <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 20 }}>
+              {state.phase === 'usual'
+                ? `Week 1: log ${state.label.toLowerCase()} as usual in your daily check-in.`
+                : `Week 2: avoid ${state.label.toLowerCase()} entirely, and keep logging.`}
+            </Txt>
+            <View style={{ height: 4, borderRadius: 2, backgroundColor: palette.surface, marginTop: spacing.lg, overflow: 'hidden' }}>
+              <View style={{ height: 4, width: `${(state.day / 14) * 100}%`, backgroundColor: palette.primary }} />
+            </View>
+            <PressableScale onPress={clear} accessibilityLabel="Cancel test" style={{ marginTop: spacing.md, minHeight: 32 }}>
+              <Txt variant="caption" tone="faint">
+                Cancel test
+              </Txt>
+            </PressableScale>
+          </>
+        ) : null}
 
-      <Kicker style={{ marginTop: spacing.xl }}>When it typically shows up</Kicker>
-      <View style={{ marginTop: spacing.sm }}>
-        <LagTimeline from={explanation.lagFrom} to={explanation.lagTo} />
-      </View>
-      <Txt variant="caption" tone="muted" style={{ marginTop: spacing.sm, lineHeight: 19 }}>
-        {explanation.typicalLag}
-      </Txt>
-      {explanation.lagTo > 14 ? (
-        <Txt variant="caption" tone="faint" style={{ marginTop: spacing.sm, lineHeight: 19 }}>
-          The dashed line marks 14 days — the furthest back Fleur can look. Part of this window
-          sits beyond it.
-        </Txt>
-      ) : null}
-
-      <Button
-        label="Close"
-        variant="secondary"
-        onPress={onClose}
-        style={{ marginTop: spacing.xl }}
-      />
-    </ScrollView>
+        {state.status === 'complete' ? (
+          <>
+            <Txt variant="heading" style={{ marginTop: spacing.md }}>
+              {`${state.label} · result`}
+            </Txt>
+            {state.week1Mean !== null && state.week2Mean !== null ? (
+              <>
+                <View style={{ flexDirection: 'row', gap: spacing.xl, marginTop: spacing.md }}>
+                  <StatTile value={state.week1Mean.toFixed(1)} label="Week 1 · as usual" />
+                  <StatTile value={state.week2Mean.toFixed(1)} label="Week 2 · avoided" />
+                </View>
+                <Txt tone="muted" style={{ marginTop: spacing.md, lineHeight: 20 }}>
+                  {describeDelta(state.week1Mean, state.week2Mean, state.label)}
+                </Txt>
+              </>
+            ) : (
+              <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 20 }}>
+                Too few check-ins across the two weeks for a fair comparison.
+              </Txt>
+            )}
+            <Button label="Start a new test" variant="secondary" onPress={clear} style={{ marginTop: spacing.lg }} />
+          </>
+        ) : null}
+      </Card>
+    </Reveal>
   );
+}
+
+function describeDelta(week1: number, week2: number, label: string): string {
+  const delta = Math.round((week2 - week1) * 10) / 10;
+  if (Math.abs(delta) < 0.3) {
+    return `Barely any difference — average severity moved by ${Math.abs(delta).toFixed(1)}. This isn't a controlled comparison, so treat it as a data point, not an answer.`;
+  }
+  const direction = delta < 0 ? 'lower' : 'higher';
+  return `Average severity was ${Math.abs(delta).toFixed(1)} points ${direction} while avoiding ${label.toLowerCase()}. Two weeks with everything else unchanged is not proof, but it's worth noticing.`;
 }

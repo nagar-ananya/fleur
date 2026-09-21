@@ -8,7 +8,7 @@
 export const DATABASE_NAME = 'fleur.db';
 
 /** Bumped whenever a statement is added to MIGRATIONS. */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 3;
 
 export const TABLE_NAMES = [
   'profile',
@@ -16,6 +16,7 @@ export const TABLE_NAMES = [
   'environment',
   'wearable',
   'prediction',
+  'journal_entry',
 ] as const;
 
 const CREATE_META = `
@@ -103,6 +104,14 @@ CREATE TABLE IF NOT EXISTS prediction (
   top_features      TEXT NOT NULL
 );`;
 
+const CREATE_JOURNAL_ENTRY = `
+CREATE TABLE IF NOT EXISTS journal_entry (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  date              TEXT NOT NULL,
+  body              TEXT NOT NULL,
+  created_at        TEXT NOT NULL
+);`;
+
 /**
  * Ordered, append-only. Index i is applied when the stored schema version is
  * <= i. Never edit an existing entry — add a new one.
@@ -118,6 +127,17 @@ export const MIGRATIONS: readonly string[][] = [
     'CREATE INDEX IF NOT EXISTS idx_checkin_date ON checkin(date DESC);',
     'CREATE INDEX IF NOT EXISTS idx_prediction_for_date ON prediction(for_date DESC);',
   ],
+  // v2 — the redesign's "areas affected" check-in step and the Reset tab's
+  // journal. Neither is a model input (§8.1's 95 features are unchanged).
+  [
+    'ALTER TABLE checkin ADD COLUMN areas TEXT;',
+    CREATE_JOURNAL_ENTRY,
+    'CREATE INDEX IF NOT EXISTS idx_journal_date ON journal_entry(date DESC);',
+  ],
+  // v3 — HRV column, ahead of the planned Fitbit/Health Connect integration
+  // (§10.2). Not a model input; HD-1 keeps HEALTH_ENABLED off, so this stays
+  // null until that integration lands.
+  ['ALTER TABLE wearable ADD COLUMN hrv REAL;'],
 ];
 
 /** PRIV-4: "delete all data" drops and recreates everything. */

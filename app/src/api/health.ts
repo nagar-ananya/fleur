@@ -5,12 +5,15 @@
  * HD-2: the app is fully functional and demoable with the flag off — manual
  *       sleep entry on the check-in form is the fallback.
  *
- * Reading HealthKit / Health Connect needs `react-native-health` or
- * `react-native-health-connect`, which need a *development build*: neither
- * works in Expo Go. §14.1 lists this as the first thing to cut under time
- * pressure, and §10.2 says to ship with the flag off if it is not working by
- * M6. That is what this file does — it defines the seam and the fallback so
- * nothing above it has to know whether real health data exists.
+ * Target device is Fitbit, read via Android Health Connect (the `WearableDay`
+ * type's `health_connect` source) — `wearableSourceLabel` in `types/models.ts`
+ * is what turns that technical source value into "Fitbit" on screen. Reading
+ * it for real needs `react-native-health-connect`, which needs a *development
+ * build*: it does not work in Expo Go. §14.1 lists this as the first thing to
+ * cut under time pressure, and §10.2 says to ship with the flag off if it is
+ * not working by M6. That is what this file does — it defines the seam and
+ * the fallback so nothing above it has to know whether real health data
+ * exists.
  *
  * To enable later: install the native module, set HEALTH_ENABLED, and
  * implement `readTrailingDays` against it. Nothing else changes; the check-in

@@ -223,6 +223,7 @@ describe('the ML join', () => {
         sleepHours: 6.8,
         sleepEfficiency: 0.9,
         restingHr: 58,
+        hrv: 42,
         steps: 8200,
         source: 'healthkit',
         fetchedAt: '2026-03-10T08:00:00Z',

@@ -14,6 +14,7 @@ import type { FeatureInputRow } from '../ml/features';
 import type {
   CheckIn,
   EnvironmentDay,
+  JournalEntry,
   PredictionRecord,
   Profile,
   PsoriasisType,
@@ -56,6 +57,7 @@ interface CheckInRow {
   new_product: number;
   med_taken: number;
   notes: string | null;
+  areas: string | null;
 }
 
 interface EnvironmentRow {
@@ -82,6 +84,7 @@ interface WearableRow {
   sleep_hours: number | null;
   sleep_efficiency: number | null;
   resting_hr: number | null;
+  hrv: number | null;
   steps: number | null;
   source: string;
   fetched_at: string;
@@ -184,6 +187,7 @@ function toCheckIn(row: CheckInRow): CheckIn {
     newProduct: bool(row.new_product),
     medTaken: bool(row.med_taken),
     notes: row.notes,
+    areas: row.areas ? row.areas.split(',').filter(Boolean) : [],
   };
 }
 
@@ -233,9 +237,9 @@ export async function saveCheckIn(db: SQLiteDatabase, checkIn: CheckIn): Promise
     `INSERT INTO checkin
        (date, severity, itch, stress, sleep_hours, water_glasses, alcohol_units,
         diet_dairy, diet_gluten, diet_processed, diet_sugar, diet_red_meat,
-        illness, sore_throat, skin_injury, new_product, med_taken, notes,
+        illness, sore_throat, skin_injury, new_product, med_taken, notes, areas,
         created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(date) DO UPDATE SET
        severity = excluded.severity, itch = excluded.itch, stress = excluded.stress,
        sleep_hours = excluded.sleep_hours, water_glasses = excluded.water_glasses,
@@ -244,7 +248,7 @@ export async function saveCheckIn(db: SQLiteDatabase, checkIn: CheckIn): Promise
        diet_sugar = excluded.diet_sugar, diet_red_meat = excluded.diet_red_meat,
        illness = excluded.illness, sore_throat = excluded.sore_throat,
        skin_injury = excluded.skin_injury, new_product = excluded.new_product,
-       med_taken = excluded.med_taken, notes = excluded.notes,
+       med_taken = excluded.med_taken, notes = excluded.notes, areas = excluded.areas,
        updated_at = excluded.updated_at;`,
     checkIn.date,
     checkIn.severity,
@@ -264,6 +268,7 @@ export async function saveCheckIn(db: SQLiteDatabase, checkIn: CheckIn): Promise
     int(checkIn.newProduct),
     int(checkIn.medTaken),
     checkIn.notes,
+    checkIn.areas.length > 0 ? checkIn.areas.join(',') : null,
     now,
     now,
   );
@@ -388,16 +393,17 @@ export async function upsertWearable(
     db.withTransactionAsync(async () => {
       for (const day of days) {
         await db.runAsync(
-        `INSERT INTO wearable (date, sleep_hours, sleep_efficiency, resting_hr, steps, source, fetched_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO wearable (date, sleep_hours, sleep_efficiency, resting_hr, hrv, steps, source, fetched_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(date) DO UPDATE SET
            sleep_hours = excluded.sleep_hours, sleep_efficiency = excluded.sleep_efficiency,
-           resting_hr = excluded.resting_hr, steps = excluded.steps,
+           resting_hr = excluded.resting_hr, hrv = excluded.hrv, steps = excluded.steps,
            source = excluded.source, fetched_at = excluded.fetched_at;`,
         day.date,
         day.sleepHours,
         day.sleepEfficiency,
         day.restingHr,
+        day.hrv,
         day.steps,
           day.source,
           day.fetchedAt,
@@ -405,6 +411,88 @@ export async function upsertWearable(
       }
     }),
   );
+}
+
+/** A single date's wearable reading, or null. Used by the check-in's Body & wearable step. */
+export async function getWearableDay(
+  db: SQLiteDatabase,
+  date: string,
+): Promise<WearableDay | null> {
+  const row = await db.getFirstAsync<WearableRow>('SELECT * FROM wearable WHERE date = ?;', date);
+  if (!row) return null;
+  return {
+    date: row.date,
+    sleepHours: row.sleep_hours,
+    sleepEfficiency: row.sleep_efficiency,
+    restingHr: row.resting_hr,
+    hrv: row.hrv,
+    steps: row.steps,
+    // The column is unconstrained TEXT; anything unrecognised is treated as
+    // Health Connect, the only source HD-1's stub could ever write.
+    source: row.source === 'healthkit' ? 'healthkit' : 'health_connect',
+    fetchedAt: row.fetched_at,
+  };
+}
+
+// --------------------------------------------------------------------------
+// Meta — small key/value preferences and feature state that don't warrant
+// their own table (§6 keeps the schema to what a migration actually needs).
+// --------------------------------------------------------------------------
+
+export async function getMeta(db: SQLiteDatabase, key: string): Promise<string | null> {
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM meta WHERE key = ?;',
+    key,
+  );
+  return row?.value ?? null;
+}
+
+export async function setMeta(db: SQLiteDatabase, key: string, value: string): Promise<void> {
+  await db.runAsync(
+    'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value;',
+    key,
+    value,
+  );
+}
+
+export async function deleteMeta(db: SQLiteDatabase, key: string): Promise<void> {
+  await db.runAsync('DELETE FROM meta WHERE key = ?;', key);
+}
+
+// --------------------------------------------------------------------------
+// Journal (Reset → Mood)
+// --------------------------------------------------------------------------
+
+interface JournalRow {
+  id: number;
+  date: string;
+  body: string;
+  created_at: string;
+}
+
+/** Reset's journal is private, local-only text — never read by the model. */
+export async function saveJournalEntry(
+  db: SQLiteDatabase,
+  date: string,
+  body: string,
+): Promise<void> {
+  await db.runAsync(
+    'INSERT INTO journal_entry (date, body, created_at) VALUES (?, ?, ?);',
+    date,
+    body,
+    new Date().toISOString(),
+  );
+}
+
+export async function listJournalEntries(
+  db: SQLiteDatabase,
+  limit = 20,
+): Promise<JournalEntry[]> {
+  const rows = await db.getAllAsync<JournalRow>(
+    'SELECT * FROM journal_entry ORDER BY created_at DESC LIMIT ?;',
+    limit,
+  );
+  return rows.map((row) => ({ id: row.id, date: row.date, body: row.body, createdAt: row.created_at }));
 }
 
 // --------------------------------------------------------------------------
@@ -560,7 +648,7 @@ export async function loadFeatureInputRows(
 const CSV_COLUMNS = [
   'date', 'severity', 'itch', 'stress', 'sleep_hours', 'water_glasses', 'alcohol_units',
   'diet_dairy', 'diet_gluten', 'diet_processed', 'diet_sugar', 'diet_red_meat',
-  'illness', 'sore_throat', 'skin_injury', 'new_product', 'med_taken', 'notes',
+  'illness', 'sore_throat', 'skin_injury', 'new_product', 'med_taken', 'notes', 'areas',
   'temp_mean_c', 'humidity_mean_pct', 'dew_point_c', 'pressure_hpa', 'uv_index_max',
   'precipitation_mm', 'pm2_5', 'pollen_total', 'sleep_hours_device', 'resting_hr', 'steps',
 ] as const;

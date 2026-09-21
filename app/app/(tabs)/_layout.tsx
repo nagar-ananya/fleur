@@ -13,6 +13,7 @@ import { Platform, StyleSheet, View, type ColorValue } from 'react-native';
 import {
   HistoryIcon,
   InsightsIcon,
+  LeafIcon,
   SettingsIcon,
   TodayIcon,
   type IconProps,
@@ -94,6 +95,7 @@ export default function TabsLayout(): React.ReactElement {
         options={{ title: 'Insights', tabBarIcon: icon(InsightsIcon) }}
       />
       <Tabs.Screen name="history" options={{ title: 'History', tabBarIcon: icon(HistoryIcon) }} />
+      <Tabs.Screen name="reset" options={{ title: 'Reset', tabBarIcon: icon(LeafIcon) }} />
       <Tabs.Screen
         name="settings"
         options={{ title: 'Settings', tabBarIcon: icon(SettingsIcon) }}

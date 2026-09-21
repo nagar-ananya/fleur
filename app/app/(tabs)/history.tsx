@@ -12,7 +12,7 @@ import { Modal, Pressable, ScrollView, View } from 'react-native';
 
 import { ActivityGrid, HeatLegend, TrendChart } from '../../src/components/charts';
 import { PulseIcon } from '../../src/components/icons';
-import { Reveal } from '../../src/components/motion';
+import { PressableScale, Reveal } from '../../src/components/motion';
 import {
   Button,
   Card,
@@ -24,6 +24,7 @@ import {
   Txt,
 } from '../../src/components/primitives';
 import { listCheckIns } from '../../src/db/queries';
+import { detectEpisodes } from '../../src/utils/episodes';
 import { useApp } from '../../src/hooks/appState';
 import { useTheme } from '../../src/hooks/useTheme';
 import { radius, spacing, severityWord } from '../../src/theme';
@@ -32,6 +33,7 @@ import {
   addDays,
   dateRange,
   formatLong,
+  formatShort,
   isEditableDate,
   todayLocal,
 } from '../../src/utils/dates';
@@ -73,6 +75,7 @@ export default function HistoryScreen(): React.ReactElement {
       : null;
 
   const selectedCheckIn = selected ? (checkIns.get(selected) ?? null) : null;
+  const episodes = useMemo(() => detectEpisodes(days), [days]);
 
   return (
     <Screen contentStyle={{ paddingBottom: 120 }}>
@@ -143,7 +146,12 @@ export default function HistoryScreen(): React.ReactElement {
             <Txt variant="heading" style={{ marginBottom: spacing.sm }}>
               Trend
             </Txt>
-            <TrendChart points={days.map((d) => ({ date: d.date, value: d.severity }))} height={120} showDots={false} />
+            <TrendChart
+              points={days.map((d) => ({ date: d.date, value: d.severity }))}
+              height={140}
+              showDots={false}
+              interactive
+            />
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
               <Txt variant="caption" tone="faint">
                 {`${WINDOW_DAYS} days ago`}
@@ -153,6 +161,43 @@ export default function HistoryScreen(): React.ReactElement {
               </Txt>
             </View>
           </Card>
+        </Reveal>
+      ) : null}
+
+      <Reveal delay={230}>
+        <Button
+          label="Backfill a missed day"
+          variant="secondary"
+          onPress={() => router.push('/backfill')}
+          style={{ marginTop: spacing.md }}
+        />
+      </Reveal>
+
+      {episodes.length > 0 ? (
+        <Reveal delay={260}>
+          <Kicker style={{ marginTop: spacing.xl, marginBottom: spacing.md }}>Flare episodes</Kicker>
+          {episodes.map((episode) => (
+            <PressableScale
+              key={episode.from}
+              onPress={() => setSelected(episode.peakDate)}
+              accessibilityLabel={`${formatLong(episode.from)} to ${formatLong(episode.to)}, peak severity ${episode.peak}`}
+              scaleTo={0.99}
+              style={{ marginBottom: spacing.sm }}
+            >
+              <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                <View style={{ width: 3, height: 30, borderRadius: 2, backgroundColor: palette.primary }} />
+                <View style={{ flex: 1 }}>
+                  <Txt variant="label">{`${formatShort(episode.from)} – ${formatShort(episode.to)}`}</Txt>
+                  <Txt variant="caption" tone="faint" style={{ marginTop: 3 }}>
+                    {`Peak day ${formatShort(episode.peakDate)} · ${episode.days} days`}
+                  </Txt>
+                </View>
+                <Txt variant="label" tone="accent">
+                  {episode.peak}
+                </Txt>
+              </Card>
+            </PressableScale>
+          ))}
         </Reveal>
       ) : null}
 

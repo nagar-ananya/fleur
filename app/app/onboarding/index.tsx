@@ -12,7 +12,7 @@ import React, { useState } from 'react';
 import { ScrollView, TextInput, View } from 'react-native';
 
 import { ChoiceRow, StepProgress, ToggleRow } from '../../src/components/inputs';
-import { CheckIcon, PinIcon, ShieldIcon, SparkIcon } from '../../src/components/icons';
+import { CheckIcon, PinIcon, ShieldIcon, SparkIcon, WatchIcon } from '../../src/components/icons';
 import { Reveal } from '../../src/components/motion';
 import {
   Button,
@@ -35,8 +35,8 @@ import {
   type PsoriasisType,
 } from '../../src/types/models';
 
-type Step = 'disclaimer' | 'profile' | 'location';
-const ORDER: Step[] = ['disclaimer', 'profile', 'location'];
+type Step = 'disclaimer' | 'profile' | 'location' | 'health';
+const ORDER: Step[] = ['disclaimer', 'profile', 'location', 'health'];
 
 export default function OnboardingScreen(): React.ReactElement {
   const { palette } = useTheme();
@@ -243,11 +243,55 @@ export default function OnboardingScreen(): React.ReactElement {
             }}
           />
 
-          <Txt variant="caption" tone="faint" style={{ marginTop: spacing.lg, lineHeight: 19 }}>
-            {HEALTH_ENABLED
-              ? 'Fleur can also read sleep and resting heart rate from your health app.'
-              : 'Sleep is entered manually on the check-in form. Health-app syncing is off in this build.'}
+          <Button
+            label="Continue"
+            onPress={() => setStep('health')}
+            style={{ marginTop: spacing.xl }}
+          />
+        </Reveal>
+      ) : null}
+
+      {step === 'health' ? (
+        <Reveal>
+          <IconBadge background={palette.primarySoft} size={54}>
+            <WatchIcon size={24} color={palette.primary} />
+          </IconBadge>
+
+          <Txt variant="title" style={{ marginTop: spacing.lg }}>
+            Let Fitbit fill in your sleep?
           </Txt>
+          <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 23 }}>
+            Fleur can read Fitbit data through Google Health once that is connected. If you skip
+            this, the sleep slider in the daily check-in covers it — nothing in Fleur is gated
+            behind a wearable.
+          </Txt>
+
+          <Card style={{ marginTop: spacing.xl }}>
+            <Txt variant="label">
+              {HEALTH_ENABLED ? 'Reading sleep, resting HR, steps' : 'Not yet connected'}
+            </Txt>
+            <Txt variant="caption" tone="faint" style={{ marginTop: spacing.sm, lineHeight: 18 }}>
+              {HEALTH_ENABLED
+                ? 'Read once a day, trailing 14 days. Nothing is ever written back.'
+                : 'Fitbit/Google Health integration is coming soon. Sleep is entered manually on the check-in form until then.'}
+            </Txt>
+          </Card>
+
+          <Card
+            tone="alt"
+            style={{
+              marginTop: spacing.xl,
+              borderColor: palette.primary,
+              borderWidth: 1,
+            }}
+          >
+            <Kicker>What happens next</Kicker>
+            <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 21 }}>
+              You land on Today with a progress ring: 0 of 14 days. Fleur will not show a risk
+              number until it has fourteen distinct check-ins — roughly two weeks of about
+              thirty seconds a day.
+            </Txt>
+          </Card>
 
           <Button
             label="Finish setup"

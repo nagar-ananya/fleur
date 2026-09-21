@@ -1,33 +1,42 @@
 /**
- * Risk detail (REQUIREMENTS §11.1 `/risk-detail`, F3, FR-4.4).
+ * Risk detail — "What X% means" (REQUIREMENTS §11.1 `/risk-detail`, F3,
+ * FR-4.4) — v2 redesign.
  *
- * Explains the current number in plain language: what is pushing it up, what
- * is pulling it down, and — just as important — what the number does not mean.
+ * Restructured around the source design: a plain-language reading of the
+ * number, why the band reads the way it does (against your own band
+ * boundaries, not a population norm), the calculation walkthrough (real
+ * intercept + real signed contributions, summing to the actual logit), then
+ * the same contributions as a tappable list into `/factor-detail`.
+ *
+ * Every number here is real: `model.intercept`, `model.threshold`,
+ * `ELEVATED_BAND_RATIO`, and the contributions `scorer.ts` already computed.
+ * Nothing is fabricated to match the source design's illustrative numbers.
  */
 
+import { Stack, useRouter } from 'expo-router';
 import React from 'react';
 import { View } from 'react-native';
 
-import { LagTimeline } from '../src/components/charts';
-import { InfoIcon, TrendDownIcon, TrendUpIcon } from '../src/components/icons';
-import { Reveal } from '../src/components/motion';
+import { ChevronRight } from '../src/components/icons';
+import { PressableScale, Reveal } from '../src/components/motion';
 import {
   Card,
-  FeatureCard,
-  IconBadge,
   Kicker,
   Screen,
   ShortDisclaimer,
   Txt,
 } from '../src/components/primitives';
-import { baseVariable, explanationFor } from '../src/constants/copy';
+import { flareFrequencyReading } from '../src/constants/copy';
 import { model, useApp } from '../src/hooks/appState';
 import { useTheme } from '../src/hooks/useTheme';
-import { bandStyle, radius, spacing } from '../src/theme';
+import { ELIMINATION_CANDIDATES } from '../src/hooks/useEliminationTest';
+import { ELEVATED_BAND_RATIO } from '../src/ml/scorer';
+import { bandStyle, spacing } from '../src/theme';
 import type { Contribution } from '../src/ml/scorer';
 
 export default function RiskDetailScreen(): React.ReactElement {
   const { palette } = useTheme();
+  const router = useRouter();
   const { risk } = useApp();
 
   if (risk.status !== 'ready') {
@@ -44,76 +53,106 @@ export default function RiskDetailScreen(): React.ReactElement {
   }
 
   const style = bandStyle(risk.band, palette);
+  const percent = Math.round(risk.probability * 100);
+  const ceiling = model.threshold * 1.5;
+  const elevatedStart = model.threshold * ELEVATED_BAND_RATIO;
+  const lowWidth = (elevatedStart / ceiling) * 100;
+  const elevatedWidth = ((model.threshold - elevatedStart) / ceiling) * 100;
+  const highWidth = 100 - lowWidth - elevatedWidth;
+
+  const allContributions = [...risk.drivers, ...risk.protective];
+  const nonZero = model.features.filter((f) => f.coefficient !== 0);
+  const sumOfContributions = allContributions.reduce((t, c) => t + c.contribution, 0);
+  const logit = model.intercept + sumOfContributions;
 
   return (
-    <Screen aurora={false}>
+    <Screen aurora={false} contentStyle={{ paddingBottom: 100 }}>
+      <Stack.Screen options={{ title: `What ${percent}% means` }} />
       <Reveal>
-        <FeatureCard gradient={style.gradient} padded={false}>
-          <View style={{ padding: spacing.xl }}>
-            <Txt variant="micro" tone="onAccent" style={{ textTransform: 'uppercase', opacity: 0.85 }}>
-              Next 72 hours
-            </Txt>
-            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, marginTop: spacing.sm }}>
-              <Txt variant="hero" tone="onAccent">
-                {`${(risk.probability * 100).toFixed(0)}%`}
-              </Txt>
-              <Txt variant="heading" tone="onAccent" style={{ opacity: 0.92 }}>
-                {style.label}
-              </Txt>
-            </View>
-            <Txt variant="caption" tone="onAccent" style={{ marginTop: spacing.sm, opacity: 0.9, lineHeight: 19 }}>
-              {`Typical rate across the training data is ${(model.metrics.base_rate * 100).toFixed(0)}%.`}
+        <Txt variant="title">{`What ${percent}% means`}</Txt>
+      </Reveal>
+
+      <Reveal delay={30}>
+        <Card level={2} style={{ marginTop: spacing.lg, borderColor: style.text, borderWidth: 1 }}>
+          <Txt tone="muted" style={{ lineHeight: 22 }}>
+            {flareFrequencyReading(percent)}
+          </Txt>
+        </Card>
+      </Reveal>
+
+      <Reveal delay={60}>
+        <View style={{ marginTop: spacing.lg, gap: spacing.sm }}>
+          <Meaning good text="It is the chance a flare starts — nothing about how severe or how long it would be." />
+          <Meaning text="It is not how much of your skin is affected, and not a score out of 100." />
+          <Meaning text="It is not a prediction that a flare will happen — on most days like today, none did." />
+        </View>
+      </Reveal>
+
+      <Reveal delay={110}>
+        <Kicker style={{ marginTop: spacing.xl, marginBottom: spacing.sm }}>
+          {`Why it reads "${style.label}"`}
+        </Kicker>
+        <Txt tone="muted" style={{ lineHeight: 21 }}>
+          Bands are fixed fractions of the model's own decision threshold, not a comparison
+          against other people or against your own history.
+        </Txt>
+        <View style={{ flexDirection: 'row', height: 6, borderRadius: 3, overflow: 'hidden', marginTop: spacing.md }}>
+          <View style={{ width: `${lowWidth}%`, backgroundColor: palette.bandLowFill }} />
+          <View style={{ width: `${elevatedWidth}%`, backgroundColor: palette.bandElevatedFill }} />
+          <View style={{ width: `${highWidth}%`, backgroundColor: palette.bandHighFill }} />
+        </View>
+        <View style={{ flexDirection: 'row', marginTop: spacing.xs }}>
+          <Txt variant="micro" tone="faint" style={{ width: `${lowWidth}%` }}>LOW</Txt>
+          <Txt variant="micro" tone="faint" style={{ width: `${elevatedWidth}%` }}>ELEVATED</Txt>
+          <Txt variant="micro" tone="faint" style={{ flex: 1 }}>HIGHER</Txt>
+        </View>
+      </Reveal>
+
+      <Reveal delay={150}>
+        <Kicker style={{ marginTop: spacing.xl, marginBottom: spacing.sm }}>How it is calculated</Kicker>
+        <Txt tone="muted" style={{ lineHeight: 21 }}>
+          {`Fleur z-scores ${model.features.length} lagged features against the training set, multiplies each by its coefficient and sums them onto an intercept of ${model.intercept.toFixed(2)}. `}
+          {`${nonZero.length} features are non-zero for you right now.`}
+        </Txt>
+      </Reveal>
+
+      {allContributions.length > 0 ? (
+        <Reveal delay={190}>
+          <Kicker style={{ marginTop: spacing.xl, marginBottom: spacing.md }}>Signed contributions</Kicker>
+          {allContributions.map((c) => (
+            <ContributionRow
+              key={c.name}
+              contribution={c}
+              onPress={() =>
+                router.push({ pathname: '/factor-detail', params: { name: c.name, label: c.label } })
+              }
+            />
+          ))}
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              marginTop: spacing.md,
+              paddingTop: spacing.md,
+              borderTopWidth: 1,
+              borderTopColor: palette.border,
+            }}
+          >
+            <Txt variant="caption" tone="faint">Sum + intercept</Txt>
+            <Txt variant="caption" tone="accent">
+              {`${logit.toFixed(2)} → ${percent}%`}
             </Txt>
           </View>
-        </FeatureCard>
-      </Reveal>
-
-      <Reveal delay={70}>
-        <Kicker style={{ marginTop: spacing.xl }}>Pushing it up</Kicker>
-      </Reveal>
-
-      {risk.drivers.length === 0 ? (
-        <Card style={{ marginTop: spacing.md }}>
-          <Txt tone="muted">Nothing is standing out as a contributor right now.</Txt>
-        </Card>
-      ) : (
-        risk.drivers.map((driver, index) => (
-          <Reveal key={driver.name} delay={110 + index * 60}>
-            <FactorCard contribution={driver} raises />
-          </Reveal>
-        ))
-      )}
-
-      {risk.protective.length > 0 ? (
-        <>
-          <Reveal delay={220}>
-            <Kicker style={{ marginTop: spacing.xl }}>Helping</Kicker>
-          </Reveal>
-          {risk.protective.map((item, index) => (
-            <Reveal key={item.name} delay={260 + index * 60}>
-              <FactorCard contribution={item} raises={false} />
-            </Reveal>
-          ))}
-        </>
+        </Reveal>
       ) : null}
 
-      <Reveal delay={340}>
-        <Card style={{ marginTop: spacing.xl }} tone="alt">
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-            <IconBadge background={palette.surface} size={34}>
-              <InfoIcon size={18} color={palette.textMuted} />
-            </IconBadge>
-            <Txt variant="heading">How to read this</Txt>
-          </View>
-          <Txt tone="muted" style={{ lineHeight: 23, marginTop: spacing.md }}>
+      <Reveal delay={230}>
+        <Card tone="alt" level={1} style={{ marginTop: spacing.xl }}>
+          <Txt tone="muted" style={{ lineHeight: 23 }}>
             This number comes from a model trained on simulated patients, not on your own
             history. It describes how closely your recent pattern resembles the ones that came
-            before flares in that data. It is an association, not a cause, and a high reading
-            does not mean a flare is coming — many do not.
-          </Txt>
-          <Txt tone="muted" style={{ lineHeight: 23, marginTop: spacing.md }}>
-            Nothing here is a reason to change your treatment. If your skin is worsening, that
-            is a conversation for your clinician.
+            before flares in that data — an association, not a cause. Nothing here is a reason
+            to change your treatment.
           </Txt>
         </Card>
       </Reveal>
@@ -123,51 +162,71 @@ export default function RiskDetailScreen(): React.ReactElement {
   );
 }
 
-function FactorCard({
+function Meaning({ text, good = false }: { text: string; good?: boolean }): React.ReactElement {
+  const { palette } = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+      <Txt style={{ color: good ? palette.bandLowText : palette.textFaint }}>{good ? '✓' : '·'}</Txt>
+      <Txt tone="muted" style={{ flex: 1, lineHeight: 21 }}>
+        {text}
+      </Txt>
+    </View>
+  );
+}
+
+function ContributionRow({
   contribution,
-  raises,
+  onPress,
 }: {
   contribution: Contribution;
-  raises: boolean;
+  onPress: () => void;
 }): React.ReactElement {
   const { palette } = useTheme();
-  const explanation = explanationFor(baseVariable(contribution.name));
+  const raises = contribution.contribution > 0;
   const tint = raises ? palette.bandHighText : palette.bandLowText;
-  const soft = raises ? palette.bandHighSoft : palette.bandLowSoft;
+  const barWidth = Math.min(100, Math.abs(contribution.contribution) * 80);
+  const base = contribution.name.split('_lag')[0]?.split('_roll')[0] ?? contribution.name;
+  const eliminable = ELIMINATION_CANDIDATES[base] !== undefined;
 
   return (
-    <Card style={{ marginTop: spacing.md }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-        <IconBadge background={soft} size={36}>
-          {raises ? (
-            <TrendUpIcon size={18} color={tint} />
-          ) : (
-            <TrendDownIcon size={18} color={tint} />
-          )}
-        </IconBadge>
+    <PressableScale
+      onPress={onPress}
+      accessibilityLabel={`${contribution.label}, ${raises ? 'raises' : 'lowers'} risk`}
+      scaleTo={0.99}
+      style={{ paddingVertical: spacing.sm }}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
         <View style={{ flex: 1 }}>
-          <Txt variant="label">{contribution.label}</Txt>
-          <Txt variant="caption" style={{ color: tint, marginTop: 1 }}>
-            {raises ? 'Raising your risk' : 'Lowering your risk'}
-          </Txt>
+          <Txt numberOfLines={1}>{contribution.label}</Txt>
         </View>
+        <Txt variant="caption" style={{ color: tint }}>
+          {`${contribution.contribution > 0 ? '+' : ''}${contribution.contribution.toFixed(2)}`}
+        </Txt>
+        <ChevronRight size={14} color={palette.textFaint} />
       </View>
-
-      <Txt tone="muted" style={{ marginTop: spacing.md, lineHeight: 21 }}>
-        {explanation.description}
-      </Txt>
-
       <View
         style={{
-          marginTop: spacing.md,
+          height: 5,
+          marginTop: 6,
           backgroundColor: palette.surfaceAlt,
-          borderRadius: radius.md,
-          paddingHorizontal: spacing.md,
-          paddingTop: spacing.sm,
+          borderRadius: 3,
+          overflow: 'hidden',
         }}
       >
-        <LagTimeline from={explanation.lagFrom} to={explanation.lagTo} />
+        <View
+          style={{
+            width: `${barWidth}%`,
+            height: 5,
+            borderRadius: 3,
+            backgroundColor: raises ? palette.bandHighFill : palette.bandLowFill,
+          }}
+        />
       </View>
-    </Card>
+      {eliminable ? (
+        <Txt variant="caption" tone="faint" style={{ marginTop: 4 }}>
+          Eligible for an elimination test — see Insights
+        </Txt>
+      ) : null}
+    </PressableScale>
   );
 }

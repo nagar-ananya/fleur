@@ -236,3 +236,162 @@ export function PlusIcon({ size, color, strokeWidth = 2.2 }: IconProps): React.R
     </Icon>
   );
 }
+
+export function ArrowLeftIcon({ size, color, strokeWidth }: IconProps): React.ReactElement {
+  return (
+    <Icon size={size}>
+      <Path d="M19 12H5M11 6l-6 6 6 6" {...stroke(color, strokeWidth)} />
+    </Icon>
+  );
+}
+
+export function CloseIcon({ size, color, strokeWidth = 2 }: IconProps): React.ReactElement {
+  return (
+    <Icon size={size}>
+      <Path d="M6 6l12 12M18 6L6 18" {...stroke(color, strokeWidth)} />
+    </Icon>
+  );
+}
+
+export function WindIcon({ size, color, strokeWidth }: IconProps): React.ReactElement {
+  return (
+    <Icon size={size}>
+      <Path d="M3 8h11.5a2.75 2.75 0 100-5.2" {...stroke(color, strokeWidth)} />
+      <Path d="M3 13h15a2.9 2.9 0 110 5.8" {...stroke(color, strokeWidth)} />
+      <Path d="M3 18h7.5" {...stroke(color, strokeWidth)} />
+    </Icon>
+  );
+}
+
+export function BowlIcon({ size, color, strokeWidth }: IconProps): React.ReactElement {
+  return (
+    <Icon size={size}>
+      <Path d="M3.5 12h17a8.5 6 0 01-17 0z" {...stroke(color, strokeWidth)} />
+      <Path d="M8 12V8.5M16 12V8.5" {...stroke(color, strokeWidth)} />
+      <Path d="M9 18.5h6" {...stroke(color, strokeWidth)} />
+    </Icon>
+  );
+}
+
+export function MoonIcon({ size, color, strokeWidth }: IconProps): React.ReactElement {
+  return (
+    <Icon size={size}>
+      <Path
+        d="M19.5 14.4A7.6 7.6 0 019.6 4.5a7.6 7.6 0 109.9 9.9z"
+        {...stroke(color, strokeWidth)}
+      />
+    </Icon>
+  );
+}
+
+export function NotebookIcon({ size, color, strokeWidth }: IconProps): React.ReactElement {
+  return (
+    <Icon size={size}>
+      <Rect x={5} y={3.5} width={14} height={17} rx={2} {...stroke(color, strokeWidth)} />
+      <Path d="M9 8.5h6M9 12h6M9 15.5h3.5" {...stroke(color, strokeWidth)} />
+    </Icon>
+  );
+}
+
+export function WatchIcon({ size, color, strokeWidth }: IconProps): React.ReactElement {
+  return (
+    <Icon size={size}>
+      <Rect x={7} y={7} width={10} height={10} rx={3} {...stroke(color, strokeWidth)} />
+      <Path d="M9.5 7V3.7h5V7M9.5 17v3.3h5V17" {...stroke(color, strokeWidth)} />
+    </Icon>
+  );
+}
+
+export function PersonMoveIcon({ size, color, strokeWidth }: IconProps): React.ReactElement {
+  return (
+    <Icon size={size}>
+      <Circle cx={12} cy={4.6} r={1.9} {...stroke(color, strokeWidth)} />
+      <Path d="M12 8v6.5M12 8l-4.5 3M12 8l4.5 3M12 14.5l-3.5 5M12 14.5l3.5 5" {...stroke(color, strokeWidth)} />
+    </Icon>
+  );
+}
+
+export function PlayIcon({ size, color, strokeWidth }: IconProps): React.ReactElement {
+  return (
+    <Icon size={size}>
+      <Path d="M7 5.2v13.6l11-6.8z" {...stroke(color, strokeWidth)} fill={color} />
+    </Icon>
+  );
+}
+
+export function PauseIcon({ size, color }: IconProps): React.ReactElement {
+  return (
+    <Icon size={size}>
+      <Rect x={6.5} y={5} width={4} height={14} rx={1} fill={color} />
+      <Rect x={13.5} y={5} width={4} height={14} rx={1} fill={color} />
+    </Icon>
+  );
+}
+
+export function LockIcon({ size, color, strokeWidth }: IconProps): React.ReactElement {
+  return (
+    <Icon size={size}>
+      <Rect x={5.5} y={11} width={13} height={9} rx={2} {...stroke(color, strokeWidth)} />
+      <Path d="M8 11V7.5a4 4 0 018 0V11" {...stroke(color, strokeWidth)} />
+    </Icon>
+  );
+}
+
+export function CircleIcon({ size, color, strokeWidth }: IconProps): React.ReactElement {
+  return (
+    <Icon size={size}>
+      <Circle cx={12} cy={12} r={8.4} {...stroke(color, strokeWidth)} />
+    </Icon>
+  );
+}
+
+export function CheckCircleIcon({ size, color, strokeWidth }: IconProps): React.ReactElement {
+  return (
+    <Icon size={size}>
+      <Circle cx={12} cy={12} r={8.4} {...stroke(color, strokeWidth)} />
+      <Path d="M8.4 12.3l2.4 2.4 5-5.2" {...stroke(color, strokeWidth)} />
+    </Icon>
+  );
+}
+
+export function FlaskIcon({ size, color, strokeWidth }: IconProps): React.ReactElement {
+  return (
+    <Icon size={size}>
+      <Path d="M10 3.5h4M10.4 3.5v5.7L5.7 18a2 2 0 001.8 3h9a2 2 0 001.8-3l-4.7-8.8V3.5" {...stroke(color, strokeWidth)} />
+      <Path d="M8 15h8" {...stroke(color, strokeWidth)} />
+    </Icon>
+  );
+}
+
+export function CloudOffIcon({ size, color, strokeWidth }: IconProps): React.ReactElement {
+  return (
+    <Icon size={size}>
+      <Path
+        d="M7 17.5h10.5a3.5 3.5 0 00.4-6.98A5.5 5.5 0 007.6 9.2 4 4 0 007 17.5z"
+        {...stroke(color, strokeWidth)}
+      />
+      <Path d="M3.5 3.5l17 17" {...stroke(color, strokeWidth)} />
+    </Icon>
+  );
+}
+
+export function AreaIcon({ size, color, strokeWidth }: IconProps): React.ReactElement {
+  return (
+    <Icon size={size}>
+      <Circle cx={9} cy={7.5} r={3.2} {...stroke(color, strokeWidth)} />
+      <Path d="M4 20c0-3.6 2.4-6 5-6s5 2.4 5 6" {...stroke(color, strokeWidth)} />
+      <Path d="M15.5 5.2c1.6.6 2.7 2 2.7 3.7 0 2.2-1.9 3.4-1.9 3.4M19 20c0-2.6-1.4-4.6-3.2-5.4" {...stroke(color, strokeWidth)} />
+    </Icon>
+  );
+}
+
+export function HeartIcon({ size, color, strokeWidth }: IconProps): React.ReactElement {
+  return (
+    <Icon size={size}>
+      <Path
+        d="M12 20s-7.5-4.6-7.5-10A4 4 0 0112 7.6 4 4 0 0119.5 10c0 5.4-7.5 10-7.5 10z"
+        {...stroke(color, strokeWidth)}
+      />
+    </Icon>
+  );
+}

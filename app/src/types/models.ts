@@ -64,6 +64,47 @@ export interface CheckIn {
   newProduct: boolean;
   medTaken: boolean;
   notes: string | null;
+  /**
+   * Body areas affected, e.g. `['elbows', 'knees']`. Added for the v2 redesign
+   * check-in's "areas affected" step. Never fed to the model (§8.1's 95
+   * features are fixed) — this is UI-only context, stored comma-joined in the
+   * `checkin.areas` column and split back out here.
+   */
+  areas: string[];
+}
+
+export const BODY_AREAS = [
+  'scalp',
+  'face',
+  'elbows',
+  'hands',
+  'trunk',
+  'knees',
+  'feet',
+  'nails',
+  'other',
+] as const;
+
+export type BodyArea = (typeof BODY_AREAS)[number];
+
+export const BODY_AREA_LABELS: Readonly<Record<BodyArea, string>> = {
+  scalp: 'Scalp',
+  face: 'Face',
+  elbows: 'Elbows',
+  hands: 'Hands',
+  trunk: 'Trunk',
+  knees: 'Knees',
+  feet: 'Feet',
+  nails: 'Nails',
+  other: 'Other',
+};
+
+/** A single private journal entry (Reset → Mood). Local-only, never scored. */
+export interface JournalEntry {
+  id: number;
+  date: string;
+  body: string;
+  createdAt: string;
 }
 
 export interface EnvironmentDay {
@@ -90,9 +131,21 @@ export interface WearableDay {
   sleepHours: number | null;
   sleepEfficiency: number | null;
   restingHr: number | null;
+  /** Heart-rate variability (ms), ahead of the planned Fitbit/Health Connect integration. */
+  hrv: number | null;
   steps: number | null;
   source: 'healthkit' | 'health_connect';
   fetchedAt: string;
+}
+
+/**
+ * Display name for a wearable data source. `health_connect` is the Android
+ * aggregator API (HD-3) — Fitbit is the actual device this project targets,
+ * so that is what the person sees, even though the technical source value
+ * stays `health_connect` (other apps can write into the same aggregator).
+ */
+export function wearableSourceLabel(source: WearableDay['source']): string {
+  return source === 'healthkit' ? 'Apple Health' : 'Fitbit';
 }
 
 export interface PredictionRecord {
@@ -126,5 +179,6 @@ export function emptyCheckIn(date: string): CheckIn {
     newProduct: false,
     medTaken: false,
     notes: null,
+    areas: [],
   };
 }

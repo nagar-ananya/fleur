@@ -1,5 +1,5 @@
 /**
- * Today (REQUIREMENTS §11.2).
+ * Today (REQUIREMENTS §11.2) — v2 redesign.
  *
  * States: Collecting, Sparse, Ready, Logged. Scoring is synchronous, so the
  * risk value is present on first paint — no spinner, no network (FR-4.1).
@@ -7,17 +7,27 @@
  * The dial is the screen. Everything else is arranged around it in decreasing
  * order of what a person opening the app actually wants: how am I, what do I
  * do next, how have I been, what is it like outside.
+ *
+ * SPEC-DEVIATION from the source design: the design's Today screen shows a
+ * per-day "chance it starts that day" for the next three days. The model
+ * only ever produces one 72-hour aggregate probability (§8.1) — there is no
+ * real per-day sub-score to show — so that row is left out rather than
+ * invented. What *is* real and shown instead: today's probability against
+ * the mean of your own past predictions ("usual"), computed from the
+ * `prediction` log (§6.5) rather than a fixed number.
  */
 
 import * as Location from 'expo-location';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { Alert, Share, View } from 'react-native';
 
-import { ProgressDial, RiskDial, TrendChart, DayRibbon } from '../../src/components/charts';
+import { TrendChart, DayRibbon } from '../../src/components/charts';
 import {
   ChevronRight,
+  CloudOffIcon,
   DropletIcon,
+  ExportIcon,
   HazeIcon,
   LeafIcon,
   PlusIcon,
@@ -37,21 +47,43 @@ import {
   ShortDisclaimer,
   Txt,
 } from '../../src/components/primitives';
-import { getEnvironmentDay, listCheckIns } from '../../src/db/queries';
-import { model, useApp } from '../../src/hooks/appState';
+import {
+  exportCsv,
+  getEnvironmentDay,
+  getLastEnvironmentFetch,
+  getRecentPredictions,
+  listCheckIns,
+} from '../../src/db/queries';
+import {
+  RISK_HORIZON_KICKER,
+  flareFrequencyReading,
+  usualComparisonReading,
+} from '../../src/constants/copy';
+import { useApp } from '../../src/hooks/appState';
 import { useTheme } from '../../src/hooks/useTheme';
 import { bandStyle, radius, spacing, type Palette } from '../../src/theme';
 import type { EnvironmentDay } from '../../src/types/models';
 import { addDays, dateRange, formatLong, todayLocal } from '../../src/utils/dates';
+import { formatRelativeTime } from '../../src/utils/relativeTime';
 
 export default function TodayScreen(): React.ReactElement {
   const { palette } = useTheme();
   const router = useRouter();
-  const { risk, refresh, refreshEnvironment, environmentStatus, todayLogged, profile, db } =
-    useApp();
+  const {
+    risk,
+    refresh,
+    refreshEnvironment,
+    environmentStatus,
+    todayLogged,
+    profile,
+    db,
+    checkinDays,
+  } = useApp();
   const [trend, setTrend] = useState<{ date: string; value: number | null }[]>([]);
   const [ribbon, setRibbon] = useState<{ date: string; logged: boolean }[]>([]);
   const [conditions, setConditions] = useState<EnvironmentDay | null>(null);
+  const [usual, setUsual] = useState<number | null>(null);
+  const [lastFetch, setLastFetch] = useState<string | null>(null);
   const today = todayLocal();
 
   // Recompute whenever the screen regains focus — returning from a check-in
@@ -74,14 +106,19 @@ export default function TodayScreen(): React.ReactElement {
       setRibbon(window.map((date) => ({ date, logged: byDate.has(date) })));
     });
     void getEnvironmentDay(db, today).then(setConditions);
+    void getLastEnvironmentFetch(db).then(setLastFetch);
+    // "Usual": the mean of your own past predictions, so the comparison on
+    // the ready card is drawn from real history, not a fixed reference.
+    void getRecentPredictions(db, 60).then((rows) => {
+      const past = rows.filter((r) => r.forDate !== today);
+      setUsual(past.length ? past.reduce((t, r) => t + r.probability, 0) / past.length : null);
+    });
   }, [db, today, risk]);
 
-  // FR-3.1: refresh on open when the cache is stale. Failures are silent here
-  // and surface only as the non-blocking indicator below (FR-3.3).
-  useEffect(() => {
-    void (async () => {
+  const doEnvironmentRefresh = useCallback(
+    async (force = false) => {
       if (profile?.latitude != null && profile.longitude != null) {
-        await refreshEnvironment({ latitude: profile.latitude, longitude: profile.longitude });
+        await refreshEnvironment({ latitude: profile.latitude, longitude: profile.longitude }, force);
         return;
       }
       const { status } = await Location.getForegroundPermissionsAsync();
@@ -89,22 +126,67 @@ export default function TodayScreen(): React.ReactElement {
       try {
         const position = await Location.getLastKnownPositionAsync();
         if (position) {
-          await refreshEnvironment({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          });
+          await refreshEnvironment(
+            { latitude: position.coords.latitude, longitude: position.coords.longitude },
+            force,
+          );
         }
       } catch (error) {
         console.warn('[fleur] location unavailable', error);
       }
-    })();
-  }, [profile, refreshEnvironment]);
+    },
+    [profile, refreshEnvironment],
+  );
+
+  // FR-3.1: refresh on open when the cache is stale. Failures are silent here
+  // and surface only as the non-blocking indicator below (FR-3.3).
+  useEffect(() => {
+    void doEnvironmentRefresh(false);
+    // Only on mount / when the profile's coordinates first arrive.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.latitude, profile?.longitude]);
+
+  const onExport = async (): Promise<void> => {
+    if (!db) return;
+    try {
+      const csv = await exportCsv(db);
+      if (csv.split('\n').length <= 2) {
+        Alert.alert('Nothing to export yet', 'Log a few check-ins first.');
+        return;
+      }
+      await Share.share({ message: csv, title: 'fleur-export.csv' });
+    } catch (error) {
+      console.error('[fleur] CSV export failed', error);
+    }
+  };
 
   return (
     <Screen contentStyle={{ paddingBottom: 120 }}>
       <Reveal>
-        <Kicker>{formatLong(today)}</Kicker>
-        <Txt variant="display" style={{ marginTop: 4 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <View>
+            <Kicker style={{ letterSpacing: 2.4 }}>FLEUR</Kicker>
+            <Txt tone="faint" variant="caption" style={{ marginTop: 6 }}>
+              {`${formatLong(today)} · day ${checkinDays}`}
+            </Txt>
+          </View>
+          <PressableScale
+            onPress={() => void onExport()}
+            accessibilityLabel="Export your data as CSV"
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: radius.md,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: palette.border,
+            }}
+          >
+            <ExportIcon size={17} color={palette.textMuted} />
+          </PressableScale>
+        </View>
+        <Txt variant="display" style={{ marginTop: spacing.md }}>
           {greeting()}
         </Txt>
       </Reveal>
@@ -113,19 +195,48 @@ export default function TodayScreen(): React.ReactElement {
         <View style={{ marginTop: spacing.xl }}>
           {risk.status === 'loading' ? <LoadingCard /> : null}
           {risk.status === 'collecting' ? (
-            <CollectingCard days={risk.days} required={risk.required} ribbon={ribbon} />
+            <CollectingCard
+              days={risk.days}
+              required={risk.required}
+              ribbon={ribbon}
+              onCheckIn={() => router.push('/checkin')}
+              onBackfill={() => router.push('/backfill')}
+            />
           ) : null}
-          {risk.status === 'sparse' ? <SparseCard ribbon={ribbon} /> : null}
+          {risk.status === 'sparse' ? (
+            <SparseCard ribbon={ribbon} onBackfill={() => router.push('/backfill')} />
+          ) : null}
           {risk.status === 'ready' ? (
             <ReadyCard
               probability={risk.probability}
+              usual={usual}
               band={risk.band}
-              drivers={risk.drivers}
               onOpen={() => router.push('/risk-detail')}
             />
           ) : null}
         </View>
       </Reveal>
+
+      {/* FR-3.3: non-blocking indicator, never a modal or an error state. */}
+      {environmentStatus === 'unavailable' ? (
+        <Reveal delay={100}>
+          <Card tone="alt" style={{ marginTop: spacing.md }} level={1}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
+              <CloudOffIcon size={17} color={palette.textFaint} />
+              <View style={{ flex: 1 }}>
+                <Txt variant="caption" tone="muted">
+                  {`Environment data unavailable${lastFetch ? ` · cached ${formatRelativeTime(lastFetch)}` : ''}. Your risk still computes on-device.`}
+                </Txt>
+              </View>
+              <PressableScale onPress={() => void doEnvironmentRefresh(true)} accessibilityLabel="Retry">
+                <Txt variant="caption" tone="accent">
+                  Retry
+                </Txt>
+              </PressableScale>
+            </View>
+          </Card>
+        </Reveal>
+      ) : null}
 
       <Reveal delay={140}>
         <CheckInCard
@@ -144,7 +255,7 @@ export default function TodayScreen(): React.ReactElement {
                 <TrendUpIcon size={17} color={palette.aqua} />
               </IconBadge>
             </View>
-            <TrendChart points={trend} height={104} />
+            <TrendChart points={trend} height={104} interactive />
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
               <Txt variant="caption" tone="faint">
                 7 days ago
@@ -163,14 +274,20 @@ export default function TodayScreen(): React.ReactElement {
         </Reveal>
       ) : null}
 
-      {/* FR-3.3: non-blocking indicator, never a modal or an error state. */}
-      {environmentStatus === 'unavailable' ? (
-        <Card tone="alt" style={{ marginTop: spacing.md }} level={1}>
-          <Txt variant="caption" tone="muted">
-            Weather data is unavailable right now. Everything else still works, and your risk is
-            computed from what is already saved.
-          </Txt>
-        </Card>
+      {risk.status === 'ready' ? (
+        <Reveal delay={310}>
+          <PressableScale onPress={() => router.push('/reset')} accessibilityLabel="Open Reset" scaleTo={0.99}>
+            <Card style={{ marginTop: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+              <IconBadge background={palette.primarySoft}>
+                <LeafIcon size={18} color={palette.primary} />
+              </IconBadge>
+              <Txt variant="label" style={{ flex: 1 }}>
+                Reset — 3 things for today
+              </Txt>
+              <ChevronRight size={17} color={palette.textFaint} />
+            </Card>
+          </PressableScale>
+        </Reveal>
       ) : null}
 
       <ShortDisclaimer />
@@ -192,18 +309,19 @@ function LoadingCard(): React.ReactElement {
 
 function ReadyCard({
   probability,
+  usual,
   band,
-  drivers,
   onOpen,
 }: {
   probability: number;
+  usual: number | null;
   band: 'low' | 'elevated' | 'high';
-  drivers: readonly { name: string; label: string }[];
   onOpen: () => void;
 }): React.ReactElement {
   const { palette } = useTheme();
   const style = bandStyle(band, palette);
   const percent = useCountUp(probability * 100);
+  const comparison = usualComparisonReading(probability, usual);
 
   return (
     <PressableScale
@@ -212,81 +330,107 @@ function ReadyCard({
       accessibilityLabel={`Flare risk ${style.label}, ${Math.round(probability * 100)} percent`}
       accessibilityHint="Opens the full breakdown"
     >
-      <Card level={2} style={{ alignItems: 'center', paddingTop: spacing.xl }}>
-        <Kicker>Next 72 hours</Kicker>
+      <Card level={2} style={{ paddingTop: spacing.xl }}>
+        <Kicker>{RISK_HORIZON_KICKER}</Kicker>
 
-        <RiskDial probability={probability} band={band} threshold={model.threshold} size={252}>
+        {/* Flat number — no gauge. A ring around a number that already reads
+            "34%, Elevated" adds a second way to say the same thing without
+            adding information. */}
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.md, marginTop: spacing.md, flexWrap: 'wrap' }}>
           <Txt variant="hero" style={{ color: style.text }}>
             {`${percent}%`}
           </Txt>
-          <Pill
-            label={style.label}
-            color={style.text}
-            background={style.soft}
-            // `Pill` defaults to flex-start so it hugs content in a row; inside
-            // the dial it has to sit under the number, not against the arc.
-            style={{ marginTop: 2, alignSelf: 'center' }}
-          />
-        </RiskDial>
+          <Pill label={style.label} color={style.text} background={style.soft} />
+        </View>
 
-        <Txt tone="muted" center style={{ marginTop: spacing.sm, lineHeight: 22 }}>
-          {style.blurb}
+        <Txt tone="muted" style={{ marginTop: spacing.md, lineHeight: 22, maxWidth: 320 }}>
+          {flareFrequencyReading(Math.round(probability * 100))}
         </Txt>
 
-        {drivers.length > 0 ? (
-          <View style={{ width: '100%', marginTop: spacing.lg }}>
-            <View
-              style={{
-                flexDirection: 'row',
-                flexWrap: 'wrap',
-                gap: spacing.sm,
-                justifyContent: 'center',
-              }}
-            >
-              {drivers.map((driver) => (
-                <View
-                  key={driver.name}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 6,
-                    backgroundColor: palette.surfaceAlt,
-                    borderRadius: radius.pill,
-                    paddingHorizontal: spacing.md,
-                    paddingVertical: 7,
-                  }}
-                >
-                  <View
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: 3,
-                      backgroundColor: style.fill,
-                    }}
-                  />
-                  <Txt variant="caption">{driver.label}</Txt>
-                </View>
-              ))}
-            </View>
-
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 4,
-                marginTop: spacing.lg,
-              }}
-            >
-              <Txt variant="label" tone="accent">
-                See what's driving this
-              </Txt>
-              <ChevronRight size={16} color={palette.primary} />
-            </View>
+        {usual !== null ? (
+          <View style={{ marginTop: spacing.lg, gap: spacing.sm }}>
+            <UsualBar label="TODAY" value={probability} fill={style.fill} accent />
+            <UsualBar label="USUAL" value={usual} fill={palette.textFaint} />
           </View>
         ) : null}
+
+        {comparison ? (
+          <Txt tone="muted" style={{ marginTop: spacing.md, lineHeight: 21 }}>
+            {comparison}
+          </Txt>
+        ) : null}
+
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            marginTop: spacing.lg,
+            paddingTop: spacing.lg,
+            borderTopWidth: 1,
+            borderTopColor: palette.border,
+          }}
+        >
+          <Txt variant="label" tone="accent" style={{ flex: 1 }}>
+            Where this number comes from
+          </Txt>
+          <ChevronRight size={16} color={palette.primary} />
+        </View>
       </Card>
     </PressableScale>
+  );
+}
+
+function NoRiskYetPill({ label }: { label: string }): React.ReactElement {
+  const { palette } = useTheme();
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        alignSelf: 'flex-start',
+        marginTop: spacing.md,
+        paddingHorizontal: spacing.md,
+        paddingVertical: 5,
+        borderRadius: 999,
+        borderWidth: 1,
+        borderColor: palette.primary,
+      }}
+    >
+      <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: palette.primary }} />
+      <Txt variant="micro" tone="accent">
+        {label}
+      </Txt>
+    </View>
+  );
+}
+
+function UsualBar({
+  label,
+  value,
+  fill,
+  accent = false,
+}: {
+  label: string;
+  value: number;
+  fill: string;
+  accent?: boolean;
+}): React.ReactElement {
+  const { palette } = useTheme();
+  const pct = Math.min(100, Math.round(value * 100));
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+      <Txt variant="micro" tone={accent ? 'accent' : 'faint'} style={{ width: 46 }}>
+        {label}
+      </Txt>
+      <View style={{ flex: 1, height: 6, borderRadius: 3, backgroundColor: palette.surfaceAlt, overflow: 'hidden' }}>
+        <View style={{ height: 6, width: `${pct}%`, borderRadius: 3, backgroundColor: fill }} />
+      </View>
+      <Txt variant="label" style={{ width: 36, textAlign: 'right' }}>
+        {`${pct}%`}
+      </Txt>
+    </View>
   );
 }
 
@@ -294,34 +438,36 @@ function CollectingCard({
   days,
   required,
   ribbon,
+  onCheckIn,
+  onBackfill,
 }: {
   days: number;
   required: number;
   ribbon: readonly { date: string; logged: boolean }[];
+  onCheckIn: () => void;
+  onBackfill: () => void;
 }): React.ReactElement {
-  const { palette } = useTheme();
-  const remaining = Math.max(required - days, 0);
-
   return (
-    <Card level={2} style={{ alignItems: 'center', paddingTop: spacing.xl }}>
-      <Kicker>Building your baseline</Kicker>
+    <Card level={2} style={{ paddingTop: spacing.xl }}>
+      <Kicker>Collecting data</Kicker>
 
-      <ProgressDial current={days} total={required} size={252}>
+      {/* Flat count — no ring. */}
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, marginTop: spacing.md }}>
         <Txt variant="hero" tone="accent">
           {days}
         </Txt>
-        <Txt variant="caption" tone="faint">
+        <Txt variant="heading" tone="faint">
           {`of ${required} days`}
         </Txt>
-      </ProgressDial>
+      </View>
 
-      <Txt variant="heading" center style={{ marginTop: spacing.sm }}>
-        {remaining === 0 ? 'Almost there' : `${remaining} more ${remaining === 1 ? 'day' : 'days'}`}
+      <Txt tone="muted" style={{ marginTop: spacing.md, lineHeight: 22, maxWidth: 320 }}>
+        Fleur needs {required} distinct days before it shows a risk number. Lagged features
+        cannot be computed from a shorter window, and a forecast built on less would be noise
+        dressed up as insight.
       </Txt>
-      <Txt tone="muted" center style={{ marginTop: spacing.sm, lineHeight: 22 }}>
-        Fleur compares today with your own usual pattern, so it needs {required} days of
-        check-ins before a forecast means anything.
-      </Txt>
+
+      <NoRiskYetPill label="NO RISK VALUE SHOWN YET" />
 
       {ribbon.length > 0 ? (
         <View style={{ width: '100%', marginTop: spacing.lg }}>
@@ -331,27 +477,47 @@ function CollectingCard({
           </Txt>
         </View>
       ) : null}
+
+      <View style={{ width: '100%', marginTop: spacing.xl, gap: spacing.sm }}>
+        <Button label={`Log day ${days + 1}`} onPress={onCheckIn} />
+        <Button label="Backfill a missed day" variant="secondary" onPress={onBackfill} />
+      </View>
+
+      <Txt variant="caption" tone="faint" center style={{ marginTop: spacing.md }}>
+        Already working: your check-ins, cached weather, and the trigger reference.
+      </Txt>
     </Card>
   );
 }
 
 function SparseCard({
   ribbon,
+  onBackfill,
 }: {
   ribbon: readonly { date: string; logged: boolean }[];
+  onBackfill: () => void;
 }): React.ReactElement {
   return (
     <Card level={2}>
-      <Txt variant="heading">A few more days will bring this back</Txt>
+      <Kicker>Forecasting paused</Kicker>
+      <Txt variant="heading" style={{ marginTop: spacing.sm }}>
+        Log a few more days to resume forecasting
+      </Txt>
       <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 22 }}>
-        There are too many gaps in the last two weeks for a fair comparison, so Fleur is holding
-        off rather than showing you a number it does not trust.
+        Above 40% of the last two weeks missing, the lag windows fill with training-set means —
+        Fleur would be forecasting from its own assumptions, not from you.
       </Txt>
       {ribbon.length > 0 ? (
         <View style={{ marginTop: spacing.lg }}>
           <DayRibbon days={ribbon} height={30} />
         </View>
       ) : null}
+      <Button
+        label="Backfill the last 7 days"
+        variant="secondary"
+        onPress={onBackfill}
+        style={{ marginTop: spacing.lg }}
+      />
     </Card>
   );
 }
@@ -378,7 +544,7 @@ function CheckInCard({
               <CheckIcon size={20} color={palette.bandLowText} />
             </IconBadge>
             <View style={{ flex: 1 }}>
-              <Txt variant="label">Today is logged</Txt>
+              <Txt variant="label">Today's check-in logged</Txt>
               <Txt variant="caption" tone="faint" style={{ marginTop: 1 }}>
                 Tap to change anything
               </Txt>
@@ -391,20 +557,22 @@ function CheckInCard({
   }
 
   return (
-    <Card style={{ marginTop: spacing.md }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-        <IconBadge background={palette.primarySoft}>
-          <PlusIcon size={20} color={palette.primary} />
-        </IconBadge>
-        <View style={{ flex: 1 }}>
-          <Txt variant="heading">How is your skin today?</Txt>
-          <Txt variant="caption" tone="faint" style={{ marginTop: 1 }}>
-            About 30 seconds
-          </Txt>
+    <PressableScale onPress={onPress} scaleTo={0.99} accessibilityLabel="Log today's check-in">
+      <Card style={{ marginTop: spacing.md, borderColor: palette.primary, borderWidth: 1 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+          <IconBadge background={palette.primarySoft}>
+            <PlusIcon size={20} color={palette.primary} />
+          </IconBadge>
+          <View style={{ flex: 1 }}>
+            <Txt variant="heading">Log today's check-in</Txt>
+            <Txt variant="caption" tone="faint" style={{ marginTop: 1 }}>
+              5 quick steps · most of it filled in for you
+            </Txt>
+          </View>
+          <ChevronRight size={18} color={palette.primary} />
         </View>
-      </View>
-      <Button label="Start check-in" onPress={onPress} style={{ marginTop: spacing.lg }} />
-    </Card>
+      </Card>
+    </PressableScale>
   );
 }
 
@@ -494,3 +662,4 @@ function greeting(): string {
   if (hour < 18) return 'Good afternoon';
   return 'Good evening';
 }
+

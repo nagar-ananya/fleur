@@ -22,15 +22,16 @@ Section references throughout the code (`§7.3`, `FR-4.2`, `SIM-6`) point back t
 | M1 — Simulator | ✅ | 39,400 rows, 9.01% flare rate, 20.9% idiopathic, deterministic under seed |
 | M2 — Model | ⚠️ **partial** | AP 0.327 (4.0× base rate); precision and VAL-2 short — see below |
 | M3 — Export | ✅ | `model.json` validates; all 95 features labelled; **parity test passes** |
-| M4 — App shell | ✅ | Bundles (1,273 modules); SQLite migrates; 4 tabs; onboarding completable |
-| M5 — Check-in | ✅ | Save/read/backfill/edit all covered by tests |
+| M4 — App shell | ✅ | Bundles; SQLite migrates (schema v2); 5 tabs; onboarding completable |
+| M5 — Check-in | ✅ | Save/read/backfill/edit all covered by tests; backfill is now its own screen |
 | M6 — Integrations | ✅ | Open-Meteo cached and offline-readable; health behind flag, **off** (§10.2) |
 | M7 — Risk & Insights | ✅ | Live risk on Today; Insights chart; disclaimers on every risk screen |
 | **UI pass** | ✅ | Full visual redesign, verified on a Pixel 7 in light and dark |
+| **v2 redesign** | ✅ | Reset tab, 5-step check-in, dedicated factor/backfill screens, real elimination test |
 | M8 — Pilot | ⬜ | Not run — needs real testers |
 | M9 — Submission | ⬜ | Demo video and writeup outstanding |
 
-**120 TypeScript tests + 21 Python tests passing. `tsc --noEmit` clean.**
+**130 TypeScript tests + 21 Python tests passing. `tsc --noEmit` clean.**
 
 ---
 
@@ -220,7 +221,7 @@ fleur/
     ├── app/                  expo-router screens
     └── src/
         ├── db/               schema, migrations, queries (snake↔camel boundary)
-        ├── ml/               features.ts (MIRRORS features.py), scorer.ts
+        ├── ml/               features.ts (MIRRORS features.py), scorer.ts, risk.ts
         ├── api/              openMeteo.ts, health.ts
         └── components/       hand-rolled SVG charts
 ```
@@ -271,6 +272,31 @@ Constraints held throughout: no red and no alarm iconography in risk
 presentation, colour never the sole carrier of meaning, 44pt minimum targets,
 light and dark first-class, and no component library (§11.5).
 
+### v2 redesign
+
+A second design pass (`app/reset-*.tsx`, `app/settings-*.tsx`,
+`app/checkin.tsx`, `app/factor-detail.tsx`, `app/backfill.tsx`) reworked the
+navigation and the check-in flow:
+
+- **5 tabs** — Today, Insights, History, **Reset**, Settings.
+- **Reset** — a non-treatment wellness section (movement, breathwork, eat,
+  wind-down, skin, mood). "Today's plan" maps your real top drivers to a
+  category via `categoryForVariable`; wind-down and skin-routine checklists
+  persist for the day in `meta`; the journal persists for real in a new
+  `journal_entry` table (schema v2).
+- **5-step check-in** — Skin (+ an "areas affected" tag row, schema v2) →
+  Body & wearable → Food & events → Context → Review & rescore. The review
+  step's "outlook after saving" is a genuine preview — `withDraftCheckIn` +
+  `deriveRiskState` (`src/ml/risk.ts`) score the in-progress draft without
+  writing anything, using the same function `AppProvider.recompute` uses.
+- **Backfill** and **factor detail** are now dedicated screens rather than a
+  date-chip row and a bottom sheet, reachable from Today, History and Insights.
+- **Settings** split into five pushed sub-pages (Profile, Permissions,
+  Export, Model & disclaimer, Delete all data) instead of one page of modals.
+- **Scrubbable trend charts** — `TrendChart`'s `interactive` prop turns touch
+  into a day-by-day readout with a persistent tooltip, used on Today and
+  History.
+
 ## Developer tools
 
 `src/dev/seed.ts`, surfaced as a dashed card at the bottom of Settings. Gated
@@ -314,23 +340,48 @@ Every deviation carries a `// SPEC-DEVIATION:` comment at its site.
    how many observations a window needs. Fixed at `{3:2, 7:5, 14:9}`, hardcoded
    rather than computed, so the two languages cannot disagree on a float boundary.
 4. **Stepped check-in** (`app/checkin.tsx`) — §11.3 asks for one scrolling
-   form; this is four steps, at the product owner's request. The sections and
-   their order are unchanged, and §11.3's own acceptance criterion — severity
-   alone saves in 2 taps — is preserved by keeping Save live on every step.
+   form; this is five steps (Skin → Body & wearable → Food & events → Context
+   → Review & rescore), at the product owner's request, following the v2
+   redesign. Sections still save as exactly one row (FR-2.1), and §11.3's own
+   acceptance criterion — severity alone saves in 2 taps — is preserved.
 5. **Conditions strip on Today** (`app/(tabs)/index.tsx`) — not in §11.2's
    "Contains" list. It shows the exact environmental inputs the model consumes,
    which makes the forecast legible and justifies the location permission.
 6. **VAL-2 reporting** — the literal test (drop `_lag*` only) leaves every
    `_roll*` column in place and understates the problem, so three additional
    cuts are reported and the pass criterion is set on the honest comparison.
+7. **Reset tab** (`app/(tabs)/reset.tsx` and `app/reset-*.tsx`) — not in the
+   original spec; added in the v2 redesign as a non-treatment "lever on a
+   logged input" (movement, breathwork, eat, wind-down, skin, mood). "Today's
+   plan" is genuinely derived from `risk.drivers`; only one flagship item per
+   category carries authored step-by-step content (from the source design) —
+   the rest get an honest overview rather than an invented routine.
+8. **No per-day forecast breakdown on Today** — the source design shows a
+   three-day "chance it starts that day" row. The model only produces one
+   72-hour aggregate probability (§8.1); there is no real per-day sub-score,
+   so it is left out. Shown instead: today's probability against the mean of
+   your own past predictions ("usual"), computed from the `prediction` log.
+9. **Elimination test** (`src/hooks/useEliminationTest.ts`) — real, not
+   decorative: picks a candidate only from your current top drivers, runs a
+   genuine 14-day two-phase window, and compares real logged severity across
+   the two halves. Explicitly labelled as an uncontrolled before/after, never
+   a trial. This closes the "elimination-test feature" gap noted below in
+   earlier revisions of this README.
+10. **Per-factor "evidence" not reproduced** (`app/factor-detail.tsx`) — the
+    source design shows fabricated-looking per-feature validation bullets
+    (e.g. "recovered in 71% of held-out patients"). No such per-feature stat
+    exists in `metrics.json`, so `factor-detail.tsx` shows only real numbers:
+    the model's own coefficient, its rank among non-zero features, and the
+    curated (real, hand-written) lag explanation from `constants/copy.ts`.
 
 ## Not built (§2, binding)
 
 Photo capture, per-user retraining, accounts, sync, social features, doctor
 portal, push notifications, medication reminders, watch apps, monetisation, i18n.
 
-Also outstanding: M8 pilot testing, the demo video, and the elimination-test
-feature (§13.4, an M8 stretch goal).
+Also outstanding: M8 pilot testing and the demo video. (The elimination-test
+feature, previously listed here as an M8 stretch goal, now ships — see
+Spec deviations §9.)
 
 ## Safety
 

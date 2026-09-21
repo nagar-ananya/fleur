@@ -26,27 +26,12 @@ import { resetDatabase, runMigrations } from '../db/migrations';
 import { DATABASE_NAME } from '../db/schema';
 import { latestFeatureVector, MIN_HISTORY_DAYS } from '../ml/features';
 import type { Model } from '../ml/model';
-import { score, topContributors, protectiveContributors, type Contribution } from '../ml/scorer';
+import { deriveRiskState, type RiskState } from '../ml/risk';
 import type { CheckIn, Profile } from '../types/models';
-import type { RiskBand } from '../types/models';
 import { todayLocal } from '../utils/dates';
 
 export const model = modelJson as unknown as Model;
-
-export type RiskState =
-  | { status: 'loading' }
-  /** Fewer than `min_days_required` distinct check-in days (FR-4.2). */
-  | { status: 'collecting'; days: number; required: number }
-  /** Enough history overall, but too much of the recent window is missing (§7.5.3). */
-  | { status: 'sparse'; days: number }
-  | {
-      status: 'ready';
-      probability: number;
-      band: RiskBand;
-      date: string;
-      drivers: readonly Contribution[];
-      protective: readonly Contribution[];
-    };
+export type { RiskState } from '../ml/risk';
 
 export type EnvironmentStatus = 'idle' | 'fetching' | 'ok' | 'unavailable';
 
@@ -85,49 +70,51 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     const db = dbRef.current;
     if (!db) return;
 
-    const rows = await loadFeatureInputRows(db, todayLocal());
-    const { vector, canPredict, checkinDays: days, date } = latestFeatureVector(rows);
-    setCheckinDays(days);
-    setTodayLogged(rows.some((r) => r.date === todayLocal() && r.severity !== null &&
-      r.severity !== undefined));
+    // A thrown error anywhere in here used to be swallowed silently by the
+    // `void refresh()` callers below, which left `risk` on its last good
+    // value forever — indistinguishable from "the score isn't updating".
+    // Logging loudly here means that failure mode is now visible in Metro /
+    // adb logcat instead of looking like a scoring bug.
+    try {
+      const rows = await loadFeatureInputRows(db, todayLocal());
+      const { checkinDays: days } = latestFeatureVector(rows);
+      setCheckinDays(days);
+      setTodayLogged(rows.some((r) => r.date === todayLocal() && r.severity !== null &&
+        r.severity !== undefined));
 
-    if (days < MIN_HISTORY_DAYS) {
-      setRisk({ status: 'collecting', days, required: MIN_HISTORY_DAYS });
-      return;
+      const next = deriveRiskState(rows, model);
+      setRisk(next);
+
+      // §6.5: append-only log so predictions can be evaluated later. Best
+      // effort — a failure here must not undo the `setRisk` above, since the
+      // number on screen is already correct at this point.
+      if (next.status === 'ready') {
+        try {
+          await insertPrediction(db, {
+            computedAt: new Date().toISOString(),
+            forDate: next.date,
+            probability: next.probability,
+            band: next.band,
+            modelVersion: model.model_version,
+            topFeatures: next.drivers.map((c) => ({ feature: c.name, contribution: c.contribution })),
+          });
+        } catch (error) {
+          console.error('[fleur] could not log prediction (risk value is still correct)', error);
+        }
+      }
+    } catch (error) {
+      console.error('[fleur] recompute failed — the shown risk value is now stale', error);
     }
-    if (!canPredict || date === null) {
-      setRisk({ status: 'sparse', days });
-      return;
-    }
-
-    const result = score(vector, model);
-    setRisk({
-      status: 'ready',
-      probability: result.probability,
-      band: result.band,
-      date,
-      drivers: topContributors(result),
-      protective: protectiveContributors(result),
-    });
-
-    // §6.5: append-only log so predictions can be evaluated later.
-    await insertPrediction(db, {
-      computedAt: new Date().toISOString(),
-      forDate: date,
-      probability: result.probability,
-      band: result.band,
-      modelVersion: model.model_version,
-      topFeatures: topContributors(result).map((c) => ({
-        feature: c.name,
-        contribution: c.contribution,
-      })),
-    });
   }, []);
 
   const refresh = useCallback(async (): Promise<void> => {
     const db = dbRef.current;
     if (!db) return;
-    setProfileState(await getProfile(db));
+    try {
+      setProfileState(await getProfile(db));
+    } catch (error) {
+      console.error('[fleur] could not reload profile', error);
+    }
     await recompute();
   }, [recompute]);
 
