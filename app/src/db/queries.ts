@@ -3,14 +3,13 @@
  *
  * This module is the *only* place snake_case database columns meet camelCase
  * TypeScript properties. Nothing above it should ever see a raw column name,
- * with one deliberate exception: `loadFeatureInputRows` hands the ML pipeline
- * snake_case keys, because those are ML variable names and §16 keeps those
- * snake_case in both languages.
+ * with one deliberate exception: `loadFeatureInputRows` hands the scoring
+ * engine snake_case keys, because those are the names the rulebook uses.
  */
 
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import type { FeatureInputRow } from '../ml/features';
+import type { FrameInputRow } from '../logic/frame';
 import type {
   CheckIn,
   EnvironmentDay,
@@ -19,6 +18,7 @@ import type {
   Profile,
   PsoriasisType,
   RiskBand,
+  StoredAiOpinion,
   WearableDay,
 } from '../types/models';
 import { addDays, todayLocal } from '../utils/dates';
@@ -460,6 +460,65 @@ export async function deleteMeta(db: SQLiteDatabase, key: string): Promise<void>
 }
 
 // --------------------------------------------------------------------------
+// AI second opinion — at most one cached answer per day (§17)
+// --------------------------------------------------------------------------
+
+export async function getAiOpinion(
+  db: SQLiteDatabase,
+  date: string,
+): Promise<StoredAiOpinion | null> {
+  const row = await db.getFirstAsync<{
+    date: string;
+    score: number;
+    band: string;
+    factor_ids: string;
+    summary: string;
+    model: string;
+    created_at: string;
+  }>('SELECT * FROM ai_opinion WHERE date = ?;', date);
+  if (!row) return null;
+
+  let factorIds: string[] = [];
+  try {
+    const parsed: unknown = JSON.parse(row.factor_ids);
+    if (Array.isArray(parsed)) factorIds = parsed as string[];
+  } catch {
+    console.warn('[fleur] could not parse stored ai factor_ids');
+  }
+
+  return {
+    date: row.date,
+    score: row.score,
+    band: row.band as RiskBand,
+    factorIds,
+    summary: row.summary,
+    model: row.model,
+    createdAt: row.created_at,
+  };
+}
+
+export async function saveAiOpinion(db: SQLiteDatabase, opinion: StoredAiOpinion): Promise<void> {
+  await db.runAsync(
+    `INSERT INTO ai_opinion (date, score, band, factor_ids, summary, model, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(date) DO UPDATE SET
+       score = excluded.score, band = excluded.band, factor_ids = excluded.factor_ids,
+       summary = excluded.summary, model = excluded.model, created_at = excluded.created_at;`,
+    opinion.date,
+    opinion.score,
+    opinion.band,
+    JSON.stringify(opinion.factorIds),
+    opinion.summary,
+    opinion.model,
+    opinion.createdAt,
+  );
+}
+
+export async function clearAiOpinions(db: SQLiteDatabase): Promise<void> {
+  await db.runAsync('DELETE FROM ai_opinion;');
+}
+
+// --------------------------------------------------------------------------
 // Journal (Reset → Mood)
 // --------------------------------------------------------------------------
 
@@ -470,7 +529,7 @@ interface JournalRow {
   created_at: string;
 }
 
-/** Reset's journal is private, local-only text — never read by the model. */
+/** Reset's journal is private, local-only text — never part of your score. */
 export async function saveJournalEntry(
   db: SQLiteDatabase,
   date: string,
@@ -504,14 +563,15 @@ export async function insertPrediction(
   record: Omit<PredictionRecord, 'id'>,
 ): Promise<void> {
   await db.runAsync(
-    `INSERT INTO prediction (computed_at, for_date, probability, band, model_version, top_features)
-     VALUES (?, ?, ?, ?, ?, ?);`,
+    `INSERT INTO prediction (computed_at, for_date, probability, band, model_version, top_features, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?);`,
     record.computedAt,
     record.forDate,
     record.probability,
     record.band,
     record.modelVersion,
     JSON.stringify(record.topFeatures),
+    record.source ?? 'local',
   );
 }
 
@@ -527,6 +587,7 @@ export async function getRecentPredictions(
     band: string;
     model_version: string;
     top_features: string;
+    source: string | null;
   }>('SELECT * FROM prediction ORDER BY computed_at DESC LIMIT ?;', limit);
 
   return rows.map((row) => ({
@@ -537,6 +598,7 @@ export async function getRecentPredictions(
     band: row.band as RiskBand,
     modelVersion: row.model_version,
     topFeatures: safeParse(row.top_features),
+    source: (row.source as PredictionRecord['source']) ?? 'local',
   }));
 }
 
@@ -555,17 +617,16 @@ function safeParse(json: string): { feature: string; contribution: number }[] {
 // --------------------------------------------------------------------------
 
 /**
- * Assemble the daily rows the feature pipeline consumes (§7.1), joining
+ * Assemble the daily rows the scoring engine consumes (§7.1), joining
  * check-ins, environment and wearable on date.
  *
- * Keys stay snake_case: these are ML variable names, and `features.ts` is a
- * mirror of `features.py` where they are snake_case too.
+ * Keys stay snake_case: these are the variable names the rulebook refers to.
  */
 export async function loadFeatureInputRows(
   db: SQLiteDatabase,
   endDate: string = todayLocal(),
   days = 45,
-): Promise<FeatureInputRow[]> {
+): Promise<FrameInputRow[]> {
   const startDate = addDays(endDate, -(days - 1));
 
   const [checkIns, environment, wearable] = await Promise.all([
@@ -638,7 +699,7 @@ export async function loadFeatureInputRows(
 
   return [...merged.values()]
     .sort((a, b) => String(a.date).localeCompare(String(b.date)))
-    .map((row) => row as FeatureInputRow);
+    .map((row) => row as FrameInputRow);
 }
 
 // --------------------------------------------------------------------------

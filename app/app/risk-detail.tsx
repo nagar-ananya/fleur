@@ -26,13 +26,13 @@ import {
   ShortDisclaimer,
   Txt,
 } from '../src/components/primitives';
-import { flareFrequencyReading } from '../src/constants/copy';
-import { model, useApp } from '../src/hooks/appState';
+import { scoreReading } from '../src/constants/copy';
+import { rulebook, useApp } from '../src/hooks/appState';
 import { useTheme } from '../src/hooks/useTheme';
 import { ELIMINATION_CANDIDATES } from '../src/hooks/useEliminationTest';
-import { ELEVATED_BAND_RATIO } from '../src/ml/scorer';
+
 import { bandStyle, spacing } from '../src/theme';
-import type { Contribution } from '../src/ml/scorer';
+import type { RuleScore } from '../src/logic/engine';
 
 export default function RiskDetailScreen(): React.ReactElement {
   const { palette } = useTheme();
@@ -53,38 +53,41 @@ export default function RiskDetailScreen(): React.ReactElement {
   }
 
   const style = bandStyle(risk.band, palette);
-  const percent = Math.round(risk.probability * 100);
-  const ceiling = model.threshold * 1.5;
-  const elevatedStart = model.threshold * ELEVATED_BAND_RATIO;
-  const lowWidth = (elevatedStart / ceiling) * 100;
-  const elevatedWidth = ((model.threshold - elevatedStart) / ceiling) * 100;
-  const highWidth = 100 - lowWidth - elevatedWidth;
+  const score = risk.score;
 
-  const allContributions = [...risk.drivers, ...risk.protective];
-  const nonZero = model.features.filter((f) => f.coefficient !== 0);
-  const sumOfContributions = allContributions.reduce((t, c) => t + c.contribution, 0);
-  const logit = model.intercept + sumOfContributions;
+  // Band zones as plain fractions of the 0-100 scale, so the strip can never
+  // disagree with the label.
+  const lowWidth = rulebook.bands.elevated;
+  const elevatedWidth = rulebook.bands.high - rulebook.bands.elevated;
+  const highWidth = 100 - rulebook.bands.high;
+
+  // Every rule that scored, not just the top few — otherwise the total below
+  // would not match the number at the top, and this screen exists to be added up.
+  const allRules = [...risk.rules]
+    .filter((r) => Math.abs(r.points) >= 0.05)
+    .sort((a, b) => Math.abs(b.points) - Math.abs(a.points));
+  const shownTotal = allRules.reduce((t, r) => t + r.points, 0);
 
   return (
     <Screen aurora={false} contentStyle={{ paddingBottom: 100 }}>
-      <Stack.Screen options={{ title: `What ${percent}% means` }} />
+      <Stack.Screen options={{ title: `How ${score} points add up` }} />
       <Reveal>
-        <Txt variant="title">{`What ${percent}% means`}</Txt>
+        <Txt variant="title">{`How ${score} points add up`}</Txt>
       </Reveal>
 
       <Reveal delay={30}>
         <Card level={2} style={{ marginTop: spacing.lg, borderColor: style.text, borderWidth: 1 }}>
           <Txt tone="muted" style={{ lineHeight: 22 }}>
-            {flareFrequencyReading(percent)}
+            {scoreReading(score, risk.drivers.length)}
           </Txt>
         </Card>
       </Reveal>
 
       <Reveal delay={60}>
         <View style={{ marginTop: spacing.lg, gap: spacing.sm }}>
-          <Meaning good text="It is the chance a flare starts — nothing about how severe or how long it would be." />
-          <Meaning text="It is not how much of your skin is affected, and not a score out of 100." />
-          <Meaning text="It is not a prediction that a flare will happen — on most days like today, none did." />
+          <Meaning good text="It is a tally of the risk factors stacking up today — you can add it up yourself below." />
+          <Meaning text="It is not a percentage chance, and not how much of your skin is affected." />
+          <Meaning text="It says nothing about how severe or how long a flare would be." />
         </View>
       </Reveal>
 
@@ -93,8 +96,7 @@ export default function RiskDetailScreen(): React.ReactElement {
           {`Why it reads "${style.label}"`}
         </Kicker>
         <Txt tone="muted" style={{ lineHeight: 21 }}>
-          Bands are fixed fractions of the model's own decision threshold, not a comparison
-          against other people or against your own history.
+          {`Under ${rulebook.bands.elevated} is low, ${rulebook.bands.elevated} to ${rulebook.bands.high - 1} is elevated, ${rulebook.bands.high} and above is higher than usual. Fixed marks on the scale — not a comparison against other people.`}
         </Txt>
         <View style={{ flexDirection: 'row', height: 6, borderRadius: 3, overflow: 'hidden', marginTop: spacing.md }}>
           <View style={{ width: `${lowWidth}%`, backgroundColor: palette.bandLowFill }} />
@@ -111,20 +113,19 @@ export default function RiskDetailScreen(): React.ReactElement {
       <Reveal delay={150}>
         <Kicker style={{ marginTop: spacing.xl, marginBottom: spacing.sm }}>How it is calculated</Kicker>
         <Txt tone="muted" style={{ lineHeight: 21 }}>
-          {`Fleur z-scores ${model.features.length} lagged features against the training set, multiplies each by its coefficient and sums them onto an intercept of ${model.intercept.toFixed(2)}. `}
-          {`${nonZero.length} features are non-zero for you right now.`}
+          {`Fleur checks ${rulebook.rules.length} rules against your last two weeks. Each one is worth up to a set number of points, and earns a share of them depending on how far along its range you are. Add them up, cap at 100. That is the whole calculation — no training, no hidden weights.`}
         </Txt>
       </Reveal>
 
-      {allContributions.length > 0 ? (
+      {allRules.length > 0 ? (
         <Reveal delay={190}>
-          <Kicker style={{ marginTop: spacing.xl, marginBottom: spacing.md }}>Signed contributions</Kicker>
-          {allContributions.map((c) => (
+          <Kicker style={{ marginTop: spacing.xl, marginBottom: spacing.md }}>Points today</Kicker>
+          {allRules.map((r) => (
             <ContributionRow
-              key={c.name}
-              contribution={c}
+              key={r.id}
+              rule={r}
               onPress={() =>
-                router.push({ pathname: '/factor-detail', params: { name: c.name, label: c.label } })
+                router.push({ pathname: '/factor-detail', params: { ruleId: r.id, label: r.label } })
               }
             />
           ))}
@@ -138,9 +139,9 @@ export default function RiskDetailScreen(): React.ReactElement {
               borderTopColor: palette.border,
             }}
           >
-            <Txt variant="caption" tone="faint">Sum + intercept</Txt>
+            <Txt variant="caption" tone="faint">Total</Txt>
             <Txt variant="caption" tone="accent">
-              {`${logit.toFixed(2)} → ${percent}%`}
+              {`${shownTotal.toFixed(1)} → ${score} points`}
             </Txt>
           </View>
         </Reveal>
@@ -149,10 +150,10 @@ export default function RiskDetailScreen(): React.ReactElement {
       <Reveal delay={230}>
         <Card tone="alt" level={1} style={{ marginTop: spacing.xl }}>
           <Txt tone="muted" style={{ lineHeight: 23 }}>
-            This number comes from a model trained on simulated patients, not on your own
-            history. It describes how closely your recent pattern resembles the ones that came
-            before flares in that data — an association, not a cause. Nothing here is a reason
-            to change your treatment.
+            The rules and their point values were written from published research on how long
+            each trigger takes to show up in the skin — not learned from your own history. Every
+            one is an association, not a cause. Nothing here is a reason to change your
+            treatment.
           </Txt>
         </Card>
       </Reveal>
@@ -175,32 +176,32 @@ function Meaning({ text, good = false }: { text: string; good?: boolean }): Reac
 }
 
 function ContributionRow({
-  contribution,
+  rule,
   onPress,
 }: {
-  contribution: Contribution;
+  rule: RuleScore;
   onPress: () => void;
 }): React.ReactElement {
   const { palette } = useTheme();
-  const raises = contribution.contribution > 0;
+  const raises = rule.points > 0;
   const tint = raises ? palette.bandHighText : palette.bandLowText;
-  const barWidth = Math.min(100, Math.abs(contribution.contribution) * 80);
-  const base = contribution.name.split('_lag')[0]?.split('_roll')[0] ?? contribution.name;
-  const eliminable = ELIMINATION_CANDIDATES[base] !== undefined;
+  // Bar shows how much of the rule's own maximum it earned.
+  const barWidth = Math.min(100, Math.abs(rule.points / rule.maxPoints) * 100);
+  const eliminable = ELIMINATION_CANDIDATES[rule.variable] !== undefined;
 
   return (
     <PressableScale
       onPress={onPress}
-      accessibilityLabel={`${contribution.label}, ${raises ? 'raises' : 'lowers'} risk`}
+      accessibilityLabel={`${rule.label}, ${Math.abs(rule.points).toFixed(1)} of ${Math.abs(rule.maxPoints)} points, ${raises ? 'raises' : 'lowers'} risk`}
       scaleTo={0.99}
       style={{ paddingVertical: spacing.sm }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
         <View style={{ flex: 1 }}>
-          <Txt numberOfLines={1}>{contribution.label}</Txt>
+          <Txt numberOfLines={1}>{rule.label}</Txt>
         </View>
         <Txt variant="caption" style={{ color: tint }}>
-          {`${contribution.contribution > 0 ? '+' : ''}${contribution.contribution.toFixed(2)}`}
+          {`${raises ? '+' : '−'}${Math.abs(rule.points).toFixed(1)} of ${Math.abs(rule.maxPoints)}`}
         </Txt>
         <ChevronRight size={14} color={palette.textFaint} />
       </View>

@@ -443,7 +443,7 @@ function Bar({
 /**
  * Where a factor's effect typically lands, on a 0-21 day axis.
  *
- * §7.4 documents each trigger's latency and §7.3 caps the model's lookback at
+ * §7.4 documents each trigger's latency and Fleur caps its lookback at
  * 14 days. Drawing both makes the sore-throat case honest: its window runs
  * past the edge of what Fleur can see.
  */

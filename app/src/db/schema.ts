@@ -8,7 +8,7 @@
 export const DATABASE_NAME = 'fleur.db';
 
 /** Bumped whenever a statement is added to MIGRATIONS. */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const TABLE_NAMES = [
   'profile',
@@ -17,6 +17,7 @@ export const TABLE_NAMES = [
   'wearable',
   'prediction',
   'journal_entry',
+  'ai_opinion',
 ] as const;
 
 const CREATE_META = `
@@ -112,6 +113,17 @@ CREATE TABLE IF NOT EXISTS journal_entry (
   created_at        TEXT NOT NULL
 );`;
 
+const CREATE_AI_OPINION = `
+CREATE TABLE IF NOT EXISTS ai_opinion (
+  date              TEXT PRIMARY KEY,
+  score             INTEGER NOT NULL,
+  band              TEXT NOT NULL,
+  factor_ids        TEXT NOT NULL,
+  summary           TEXT NOT NULL,
+  model             TEXT NOT NULL,
+  created_at        TEXT NOT NULL
+);`;
+
 /**
  * Ordered, append-only. Index i is applied when the stored schema version is
  * <= i. Never edit an existing entry — add a new one.
@@ -138,6 +150,13 @@ export const MIGRATIONS: readonly string[][] = [
   // (§10.2). Not a model input; HD-1 keeps HEALTH_ENABLED off, so this stays
   // null until that integration lands.
   ['ALTER TABLE wearable ADD COLUMN hrv REAL;'],
+  // v4 — the points system replaces the trained model. `source` records which
+  // scorer produced a row, and `ai_opinion` caches one AI answer per day so the
+  // optional second opinion costs at most one API call daily.
+  [
+    "ALTER TABLE prediction ADD COLUMN source TEXT NOT NULL DEFAULT 'local';",
+    CREATE_AI_OPINION,
+  ],
 ];
 
 /** PRIV-4: "delete all data" drops and recreates everything. */

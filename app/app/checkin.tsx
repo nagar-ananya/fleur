@@ -12,7 +12,7 @@
  * opened from History's "Edit this day", the `date` param it was given.
  *
  * Step 5's "outlook after saving" is a genuine preview: `withDraftCheckIn`
- * splices the in-progress draft into the same rows the model would see, and
+ * splices the in-progress draft into the same rows the scorer would see, and
  * `deriveRiskState` — the exact function `AppProvider.recompute` uses —
  * scores it. Nothing is written until Save is actually pressed.
  */
@@ -50,9 +50,9 @@ import {
   getWearableDay,
   loadFeatureInputRows,
 } from '../src/db/queries';
-import { model, useApp } from '../src/hooks/appState';
+import { rulebook, useApp } from '../src/hooks/appState';
 import { useTheme } from '../src/hooks/useTheme';
-import { deriveRiskState, withDraftCheckIn, type RiskState } from '../src/ml/risk';
+import { deriveRiskState, withDraftCheckIn, type RiskState } from '../src/logic/risk';
 import { bandStyle, radius, spacing } from '../src/theme';
 import {
   BODY_AREAS,
@@ -454,7 +454,7 @@ function BodyStep({
       {sleepFromWearable ? (
         <Txt variant="caption" tone="faint" style={{ marginTop: spacing.md, lineHeight: 18 }}>
           Sleep was read from Fitbit. Drag it if the night was different from what it recorded
-          — though the Fitbit reading is what the model actually uses (HD-5).
+          — though the Fitbit reading is what your score actually uses (HD-5).
         </Txt>
       ) : null}
     </Reveal>
@@ -632,7 +632,7 @@ function ContextStep({
         }}
       />
       <Txt variant="caption" tone="faint" style={{ marginTop: spacing.sm, lineHeight: 18 }}>
-        Notes are searchable in History. They are not fed to the model.
+        Notes are searchable in History. They are not part of your score.
       </Txt>
     </Reveal>
   );
@@ -671,7 +671,7 @@ function ReviewStep({
       .then((rows) => {
         if (cancelled) return;
         const merged = withDraftCheckIn(rows, { ...draft, date });
-        setPreview(deriveRiskState(merged, model));
+        setPreview(deriveRiskState(merged, rulebook));
       })
       .catch((error: unknown) => {
         // A silent failure here would look identical to "the outlook never
@@ -740,14 +740,13 @@ function ReviewStep({
     ...(envCount > 0
       ? [{ icon: '☁️', title: 'Open-Meteo', subtitle: 'Temperature, humidity, air quality, UV', n: envCount }]
       : []),
-    { icon: '🕓', title: 'Your history', subtitle: 'Lag windows across your logged days', n: checkinDays },
+    { icon: '🕓', title: 'Your history', subtitle: 'The days each rule looks back over', n: checkinDays },
   ];
 
   return (
     <Reveal>
       <Txt tone="muted" style={{ lineHeight: 20, marginBottom: spacing.lg }}>
-        Saving recomputes every lagged feature across your last two weeks — about a second on
-        device.
+        {`Saving re-checks all ${rulebook.rules.length} rules against your last two weeks — about a second on device.`}
       </Txt>
 
       {sources.map((source) => (
@@ -814,8 +813,8 @@ function Outlook({
   }
 
   const style = bandStyle(after.band, palette);
-  const beforePct = before.status === 'ready' ? Math.round(before.probability * 100) : null;
-  const afterPct = Math.round(after.probability * 100);
+  const beforePct = before.status === 'ready' ? before.score : null;
+  const afterPct = after.score;
   const delta = beforePct === null ? null : afterPct - beforePct;
 
   return (
@@ -823,18 +822,19 @@ function Outlook({
       <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.md }}>
         {beforePct !== null ? (
           <Txt variant="heading" tone="faint" style={{ textDecorationLine: 'line-through' }}>
-            {`${beforePct}%`}
+            {beforePct}
           </Txt>
         ) : null}
-        <Txt variant="display" style={{ color: style.text }}>{`${afterPct}%`}</Txt>
+        <Txt variant="display" style={{ color: style.text }}>{afterPct}</Txt>
+        <Txt tone="faint" style={{ paddingBottom: 4 }}>/ 100</Txt>
         <Pill label={style.label} color={style.text} background={style.soft} />
       </View>
       <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 20 }}>
         {beforePct === null || delta === null
           ? 'Your first forecast with this check-in included.'
           : delta === 0
-            ? `Unchanged from ${beforePct}% before this check-in.`
-            : `${delta > 0 ? 'Up' : 'Down'} ${Math.abs(delta)} point${Math.abs(delta) === 1 ? '' : 's'} from ${beforePct}% before this check-in.`}
+            ? `Unchanged from ${beforePct} before this check-in.`
+            : `${delta > 0 ? 'Up' : 'Down'} ${Math.abs(delta)} point${Math.abs(delta) === 1 ? '' : 's'} from ${beforePct} before this check-in.`}
       </Txt>
     </View>
   );

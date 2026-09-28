@@ -62,7 +62,7 @@ export default function JournalScreen(): React.ReactElement {
         <Card level={2} style={{ marginTop: spacing.xl }}>
           <Txt variant="heading">{prompt}</Txt>
           <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 20 }}>
-            Naming it is the point. The stress slider gives the model a number; this gives you
+            Naming it is the point. The stress slider gives your score a number; this gives you
             the reason behind the number when you read it back in a few weeks.
           </Txt>
         </Card>

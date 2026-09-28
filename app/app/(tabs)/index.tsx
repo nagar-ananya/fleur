@@ -56,13 +56,13 @@ import {
 } from '../../src/db/queries';
 import {
   RISK_HORIZON_KICKER,
-  flareFrequencyReading,
+  scoreReading,
   usualComparisonReading,
 } from '../../src/constants/copy';
 import { useApp } from '../../src/hooks/appState';
 import { useTheme } from '../../src/hooks/useTheme';
 import { bandStyle, radius, spacing, type Palette } from '../../src/theme';
-import type { EnvironmentDay } from '../../src/types/models';
+import type { EnvironmentDay, StoredAiOpinion } from '../../src/types/models';
 import { addDays, dateRange, formatLong, todayLocal } from '../../src/utils/dates';
 import { formatRelativeTime } from '../../src/utils/relativeTime';
 
@@ -78,6 +78,10 @@ export default function TodayScreen(): React.ReactElement {
     profile,
     db,
     checkinDays,
+    analysisMode,
+    aiOpinion,
+    aiStatus,
+    refreshAiOpinion,
   } = useApp();
   const [trend, setTrend] = useState<{ date: string; value: number | null }[]>([]);
   const [ribbon, setRibbon] = useState<{ date: string; logged: boolean }[]>([]);
@@ -111,7 +115,10 @@ export default function TodayScreen(): React.ReactElement {
     // the ready card is drawn from real history, not a fixed reference.
     void getRecentPredictions(db, 60).then((rows) => {
       const past = rows.filter((r) => r.forDate !== today);
-      setUsual(past.length ? past.reduce((t, r) => t + r.probability, 0) / past.length : null);
+      // Stored as a fraction in the existing column; the UI works in points.
+      setUsual(
+        past.length ? (past.reduce((t, r) => t + r.probability, 0) / past.length) * 100 : null,
+      );
     });
   }, [db, today, risk]);
 
@@ -208,7 +215,8 @@ export default function TodayScreen(): React.ReactElement {
           ) : null}
           {risk.status === 'ready' ? (
             <ReadyCard
-              probability={risk.probability}
+              score={risk.score}
+              driverCount={risk.drivers.length}
               usual={usual}
               band={risk.band}
               onOpen={() => router.push('/risk-detail')}
@@ -274,6 +282,19 @@ export default function TodayScreen(): React.ReactElement {
         </Reveal>
       ) : null}
 
+      {/* §17: additive only. The number above is always the local one. */}
+      {analysisMode === 'local_plus_ai' && risk.status === 'ready' ? (
+        <Reveal delay={290}>
+          <AiCard
+            status={aiStatus}
+            opinion={aiOpinion}
+            localBand={risk.band}
+            localScore={risk.score}
+            onRetry={() => void refreshAiOpinion(true)}
+          />
+        </Reveal>
+      ) : null}
+
       {risk.status === 'ready' ? (
         <Reveal delay={310}>
           <PressableScale onPress={() => router.push('/reset')} accessibilityLabel="Open Reset" scaleTo={0.99}>
@@ -308,48 +329,50 @@ function LoadingCard(): React.ReactElement {
 }
 
 function ReadyCard({
-  probability,
+  score,
+  driverCount,
   usual,
   band,
   onOpen,
 }: {
-  probability: number;
+  score: number;
+  driverCount: number;
   usual: number | null;
   band: 'low' | 'elevated' | 'high';
   onOpen: () => void;
 }): React.ReactElement {
   const { palette } = useTheme();
   const style = bandStyle(band, palette);
-  const percent = useCountUp(probability * 100);
-  const comparison = usualComparisonReading(probability, usual);
+  const points = useCountUp(score);
+  const comparison = usualComparisonReading(score, usual);
 
   return (
     <PressableScale
       onPress={onOpen}
       scaleTo={0.985}
-      accessibilityLabel={`Flare risk ${style.label}, ${Math.round(probability * 100)} percent`}
+      accessibilityLabel={`Flare risk ${style.label}, ${score} points out of 100`}
       accessibilityHint="Opens the full breakdown"
     >
       <Card level={2} style={{ paddingTop: spacing.xl }}>
         <Kicker>{RISK_HORIZON_KICKER}</Kicker>
 
-        {/* Flat number — no gauge. A ring around a number that already reads
-            "34%, Elevated" adds a second way to say the same thing without
-            adding information. */}
+        {/* Points, not a percentage — the number is a tally, and writing it
+            with a % sign would invite reading it as a probability. */}
         <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.md, marginTop: spacing.md, flexWrap: 'wrap' }}>
           <Txt variant="hero" style={{ color: style.text }}>
-            {`${percent}%`}
+            {points}
           </Txt>
+          <Txt tone="faint" style={{ paddingBottom: 6 }}>/ 100</Txt>
           <Pill label={style.label} color={style.text} background={style.soft} />
         </View>
 
         <Txt tone="muted" style={{ marginTop: spacing.md, lineHeight: 22, maxWidth: 320 }}>
-          {flareFrequencyReading(Math.round(probability * 100))}
+          {scoreReading(score, driverCount)}
         </Txt>
 
         {usual !== null ? (
           <View style={{ marginTop: spacing.lg, gap: spacing.sm }}>
-            <UsualBar label="TODAY" value={probability} fill={style.fill} accent />
+            <UsualBar label="TODAY" value={score} fill={style.fill} accent />
             <UsualBar label="USUAL" value={usual} fill={palette.textFaint} />
           </View>
         ) : null}
@@ -372,12 +395,93 @@ function ReadyCard({
           }}
         >
           <Txt variant="label" tone="accent" style={{ flex: 1 }}>
-            Where this number comes from
+            See how the points add up
           </Txt>
           <ChevronRight size={16} color={palette.primary} />
         </View>
       </Card>
     </PressableScale>
+  );
+}
+
+function AiCard({
+  status,
+  opinion,
+  localBand,
+  localScore,
+  onRetry,
+}: {
+  status: 'off' | 'loading' | 'ok' | 'unavailable';
+  opinion: StoredAiOpinion | null;
+  localBand: 'low' | 'elevated' | 'high';
+  localScore: number;
+  onRetry: () => void;
+}): React.ReactElement | null {
+  const { palette } = useTheme();
+  if (status === 'off') return null;
+
+  if (status === 'loading') {
+    return (
+      <Card tone="alt" level={1} style={{ marginTop: spacing.md }}>
+        <Kicker>AI second opinion</Kicker>
+        <Txt tone="faint" style={{ marginTop: spacing.sm }}>
+          Asking…
+        </Txt>
+      </Card>
+    );
+  }
+
+  if (status === 'unavailable' || !opinion) {
+    return (
+      <PressableScale onPress={onRetry} accessibilityLabel="Retry the AI second opinion" scaleTo={0.99}>
+        <Card tone="alt" level={1} style={{ marginTop: spacing.md }}>
+          <Kicker>AI second opinion</Kicker>
+          <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 21 }}>
+            Unavailable right now. Your score above is unaffected — it is worked
+            out on this phone. Tap to try again.
+          </Txt>
+        </Card>
+      </PressableScale>
+    );
+  }
+
+  const style = bandStyle(opinion.band, palette);
+  const agrees = opinion.band === localBand;
+  const drift = opinion.score - localScore;
+
+  return (
+    <Card tone="alt" level={1} style={{ marginTop: spacing.md }}>
+      <Kicker>AI second opinion</Kicker>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'baseline',
+          gap: spacing.sm,
+          marginTop: spacing.sm,
+          flexWrap: 'wrap',
+        }}
+      >
+        <Txt variant="title" style={{ color: style.text }}>
+          {opinion.score}
+        </Txt>
+        <Txt tone="faint">/ 100</Txt>
+        <Pill label={style.label} color={style.text} background={style.soft} />
+      </View>
+
+      <Txt tone="muted" style={{ marginTop: spacing.md, lineHeight: 21 }}>
+        {agrees
+          ? `Fleur's own rules agree — both read ${bandStyle(localBand, palette).label.toLowerCase()}.`
+          : `Fleur's own rules read ${bandStyle(localBand, palette).label.toLowerCase()}, ${
+              drift > 0 ? 'lower' : 'higher'
+            } than the AI. When they disagree, the rules are the number Fleur stands behind — they can be checked by hand.`}
+      </Txt>
+
+      {opinion.summary ? (
+        <Txt tone="muted" style={{ marginTop: spacing.md, lineHeight: 21, fontStyle: 'italic' }}>
+          {opinion.summary}
+        </Txt>
+      ) : null}
+    </Card>
   );
 }
 
@@ -418,17 +522,17 @@ function UsualBar({
   accent?: boolean;
 }): React.ReactElement {
   const { palette } = useTheme();
-  const pct = Math.min(100, Math.round(value * 100));
+  const points = Math.min(100, Math.round(value));
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
       <Txt variant="micro" tone={accent ? 'accent' : 'faint'} style={{ width: 46 }}>
         {label}
       </Txt>
       <View style={{ flex: 1, height: 6, borderRadius: 3, backgroundColor: palette.surfaceAlt, overflow: 'hidden' }}>
-        <View style={{ height: 6, width: `${pct}%`, borderRadius: 3, backgroundColor: fill }} />
+        <View style={{ height: 6, width: `${points}%`, borderRadius: 3, backgroundColor: fill }} />
       </View>
       <Txt variant="label" style={{ width: 36, textAlign: 'right' }}>
-        {`${pct}%`}
+        {points}
       </Txt>
     </View>
   );
@@ -504,8 +608,8 @@ function SparseCard({
         Log a few more days to resume forecasting
       </Txt>
       <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 22 }}>
-        Above 40% of the last two weeks missing, the lag windows fill with training-set means —
-        Fleur would be forecasting from its own assumptions, not from you.
+        Above 40% of the last two weeks missing, too many rules have nothing to look at —
+        Fleur would be scoring from gaps, not from you.
       </Txt>
       {ribbon.length > 0 ? (
         <View style={{ marginTop: spacing.lg }}>
@@ -580,7 +684,7 @@ function CheckInCard({
  * Today's conditions, straight from the cached Open-Meteo rows.
  *
  * SPEC-DEVIATION: §11.2's "Contains" list does not mention this. It earns its
- * place — these are the exact environmental inputs the model consumes, so
+ * place — these are the exact environmental inputs the weather rules read, so
  * showing them makes the forecast legible instead of opaque, and justifies the
  * location permission the app asked for. Kept visually secondary.
  */
@@ -639,7 +743,7 @@ function ConditionsStrip({
   return (
     <Card style={{ marginTop: spacing.md }} tone="alt" level={1}>
       <Txt variant="caption" tone="faint" style={{ marginBottom: spacing.md }}>
-        Conditions where you are — the same readings the model uses
+        Conditions where you are — the same readings your score uses
       </Txt>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         {items.map((item) => (

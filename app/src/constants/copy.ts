@@ -24,39 +24,46 @@ export const INSIGHTS_PREAMBLE =
   'together with flares in the data — not that it caused them.';
 
 /** §13.4: never "your #1 trigger". */
-export const INSIGHTS_SUBTITLE = 'Most strongly associated with flares in the training data';
+export const INSIGHTS_SUBTITLE = 'What has been adding most to your score';
 
 /**
  * How Fleur states the headline number — used on both Today and
- * `/risk-detail` so the two never phrase the same probability differently.
+ * `/risk-detail` so the two never phrase the same score differently.
  *
- * §8.1: the model's target is "a flare begins in the next 72 hours" — three
- * days. This wording says so explicitly so it can never be misread as the
- * 14-day figure, which is only the minimum *history* required before any
- * forecast is shown (FR-4.2), not the forecast's own horizon.
+ * The horizon is three days (§8.1's target). The 14-day figure is only the
+ * minimum *history* required before any score is shown (FR-4.2).
  */
-export const RISK_HORIZON_KICKER = 'Chance a new flare starts · next 3 days';
+export const RISK_HORIZON_KICKER = 'Flare risk score · next 3 days';
 
-export function flareFrequencyReading(percent: number): string {
-  return (
-    `Of 100 days that resembled today in the training data, a flare followed ` +
-    `within three days on about ${percent} of them.`
-  );
+/**
+ * Says what the number is, and nothing more.
+ *
+ * Deliberately not a frequency. The score is a tally of how many risk factors
+ * are stacking up today, which anyone can add up by hand from the rulebook — a
+ * claim about how often a flare actually follows would need a measurement to
+ * stay true, and would go stale the moment a rule changed.
+ */
+export function scoreReading(score: number, driverCount: number): string {
+  if (driverCount === 0) {
+    return 'Nothing is adding much to your score today.';
+  }
+  const factors = driverCount === 1 ? 'factor' : 'factors';
+  return `${score} points, from ${driverCount} ${factors} adding up today.`;
 }
 
 /**
  * A plain comparison against the person's own history, never a fixed
- * reference. `usual` and `probability` are both fractions (0–1); returns
- * `null` when there isn't yet a meaningful "usual" to compare against.
+ * reference. Both arguments are scores out of 100; returns `null` when there
+ * isn't yet a meaningful "usual" to compare against.
  */
-export function usualComparisonReading(probability: number, usual: number | null): string | null {
-  if (usual === null || usual <= 0.001) return null;
-  const ratio = probability / usual;
+export function usualComparisonReading(score: number, usual: number | null): string | null {
+  if (usual === null || usual < 1) return null;
+  const ratio = score / usual;
   if (ratio >= 1.8) {
     return `Roughly ${Math.round(ratio)}× your own average from past check-ins, which is why today stands out.`;
   }
   if (ratio >= 1.2) {
-    return "Somewhat above your own average from past check-ins.";
+    return 'Somewhat above your own average from past check-ins.';
   }
   if (ratio <= 0.6) {
     return 'Well below your own average from past check-ins.';
@@ -75,9 +82,8 @@ export interface FactorExplanation {
 }
 
 /**
- * Keyed by ML base variable. Lives in the app rather than in `model.json`
- * because it is UI copy — §8.6 fixes the model contract and `label` is the
- * only display string that ships with the model.
+ * Keyed by the base variable each rule names. Lives here rather than in
+ * `rulebook.json` because it is UI copy, not part of the scoring contract.
  */
 export const FACTOR_EXPLANATIONS: Readonly<Record<string, FactorExplanation>> = {
   stress: {
@@ -150,7 +156,7 @@ export const FACTOR_EXPLANATIONS: Readonly<Record<string, FactorExplanation>> = 
       'tracked separately from general illness for that reason.',
     typicalLag:
       'Usually 14 to 21 days. Fleur can only look back 14 days, so the tail of this ' +
-      'window is outside what the model sees.',
+      'window is outside what Fleur can see.',
     lagFrom: 14,
     lagTo: 21,
   },
@@ -223,7 +229,7 @@ export const FACTOR_EXPLANATIONS: Readonly<Record<string, FactorExplanation>> = 
   severity_delta: {
     description:
       'How far today sits above or below your recent average. This is the single strongest ' +
-      'signal in the model — skin that has already started moving tends to keep moving.',
+      'signal Fleur has — skin that has already started moving tends to keep moving.',
     typicalLag: 'Today, compared with the last 14 days.',
     lagFrom: 0,
     lagTo: 1,
@@ -248,22 +254,11 @@ export function explanationFor(baseVariable: string): FactorExplanation {
   return (
     FACTOR_EXPLANATIONS[baseVariable] ?? {
       description:
-        'This factor was included in the model because it moved together with flares in ' +
+        'Fleur watches this factor because it has been associated with flares in ' +
         'the training data.',
       typicalLag: 'Varies.',
       lagFrom: 0,
       lagTo: 14,
     }
   );
-}
-
-/** 'pm2_5_roll14' -> 'pm2_5'. Mirrors `validate.base_variable` in Python. */
-export function baseVariable(featureName: string): string {
-  for (const marker of ['_lag', '_roll']) {
-    const index = featureName.lastIndexOf(marker);
-    if (index > 0 && /^\d+$/.test(featureName.slice(index + marker.length))) {
-      return featureName.slice(0, index);
-    }
-  }
-  return featureName;
 }

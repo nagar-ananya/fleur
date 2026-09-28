@@ -87,7 +87,8 @@ function Gate(): React.ReactElement {
         <Stack.Screen name="settings-profile" options={{ title: 'Profile' }} />
         <Stack.Screen name="settings-permissions" options={{ title: 'Permissions' }} />
         <Stack.Screen name="settings-export" options={{ title: 'Export as CSV' }} />
-        <Stack.Screen name="settings-model" options={{ title: 'Model & disclaimer' }} />
+        <Stack.Screen name="settings-ai" options={{ title: 'AI second opinion' }} />
+        <Stack.Screen name="settings-model" options={{ title: 'Scoring & disclaimer' }} />
         <Stack.Screen name="settings-delete" options={{ title: 'Delete all data' }} />
       </Stack>
     </>

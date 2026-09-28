@@ -13,7 +13,7 @@
  *
  * The generated series deliberately mirrors the shape `ml/simulate.py` builds:
  * autocorrelated self-reports rather than i.i.d. noise, a planted illness
- * episode and a stressful stretch at lags the model can actually see, and a
+ * episode and a stressful stretch at lags the rules can actually see, and a
  * recent upward drift so the risk lands somewhere interesting rather than
  * pinned at the floor.
  */
@@ -78,7 +78,7 @@ export async function seedDemoCheckIns(
     stressNoise = 0.6 * stressNoise + (random() - 0.5) * 3.4;
     sleepNoise = 0.55 * sleepNoise + (random() - 0.5) * 1.8;
 
-    // A stressful fortnight, then an illness — both placed at lags the model
+    // A stressful fortnight, then an illness — both placed at lags the rules
     // can see, so the contributor list on /risk-detail has real content.
     const stressfulStretch = daysAgo <= 13 && daysAgo >= 8;
     const illnessEpisode = daysAgo <= 12 && daysAgo >= 9;

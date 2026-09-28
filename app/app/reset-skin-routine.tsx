@@ -63,7 +63,7 @@ export default function SkinRoutineScreen(): React.ReactElement {
         <Card tone="alt" level={1} style={{ marginTop: spacing.xl, borderRadius: radius.lg }}>
           <Txt variant="caption" tone="muted" style={{ lineHeight: 19 }}>
             Ticking a step here does not log medication adherence — that lives in the check-in,
-            where the model reads it.
+            where your score reads it.
           </Txt>
         </Card>
       </Reveal>

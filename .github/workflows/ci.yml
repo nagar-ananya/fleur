@@ -1,9 +1,8 @@
-# CI (REQUIREMENTS §15.1 TEST-3).
+# CI.
 #
-# The parity test is the gate: `ml/features.py` and `app/src/ml/features.ts`
-# are two implementations of one spec, and when they drift the app produces
-# confidently wrong predictions with nothing crashing. It runs as its own job
-# so a failure is unmistakable in the checks list, and it blocks merge.
+# The old blocking parity job is gone: the scoring engine is now written once,
+# in TypeScript, so there are no longer two implementations of one spec that can
+# drift apart. What replaces it is the rulebook-integrity test inside `npm test`.
 
 name: ci
 
@@ -13,23 +12,6 @@ on:
   pull_request:
 
 jobs:
-  parity:
-    name: Parity test (blocking)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: app/package-lock.json
-      - run: npm ci
-        working-directory: app
-      # Fails loudly if model.json or the fixtures were not regenerated
-      # alongside a change to either feature implementation.
-      - run: npm run test:parity
-        working-directory: app
-
   app:
     name: App — typecheck and tests
     runs-on: ubuntu-latest
@@ -47,8 +29,8 @@ jobs:
       - run: npm test
         working-directory: app
 
-  ml:
-    name: ML pipeline
+  simulator:
+    name: Simulator (test data only)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,10 +41,9 @@ jobs:
           cache-dependency-path: ml/requirements.txt
       - run: pip install -r requirements.txt
         working-directory: ml
-      - run: python -m pytest tests/ -q
-        working-directory: ml
-      # A short deterministic run: proves the simulator still produces a panel
-      # and that SIM-8 holds, without spending CI time on all 200 patients.
+      # The simulator is no longer part of the product — it generates the
+      # held-out test data the rulebook's numbers were measured on. This proves
+      # it still runs and that SIM-8 determinism holds.
       - name: Simulator smoke test
         working-directory: ml
         run: |

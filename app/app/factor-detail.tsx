@@ -4,7 +4,7 @@
  * from Insights' trigger list, from Today's risk-detail contributions, and
  * from a Reset session's "why this is here" line.
  *
- * Everything shown is either the model's own coefficient (real) or the
+ * Everything shown is either the rule's own point value (real) or the
  * curated per-variable copy already in `constants/copy.ts` (real, written
  * for this project). The source design's per-factor "evidence" bullets are
  * deliberately not reproduced — they read as computed per-feature validation
@@ -21,29 +21,45 @@ import { LagTimeline } from '../src/components/charts';
 import { WindIcon } from '../src/components/icons';
 import { Reveal } from '../src/components/motion';
 import { Button, Card, Kicker, Screen, Txt } from '../src/components/primitives';
-import { baseVariable, explanationFor } from '../src/constants/copy';
+import { explanationFor } from '../src/constants/copy';
 import { categoryForVariable, planItemFor } from '../src/constants/reset';
-import { model } from '../src/hooks/appState';
+import { rulebook } from '../src/hooks/appState';
+import type { Rule } from '../src/logic/rulebook';
 import { useTheme } from '../src/hooks/useTheme';
 import { radius, spacing } from '../src/theme';
+
+/** Plain-English version of a rule's window and its two marks. */
+function ruleWindowReading(rule: Rule): string {
+  const { how, from = 0, to = 0 } = rule.look_at;
+  const window =
+    how === 'today'
+      ? 'today'
+      : from === 0
+        ? `over the last ${to + 1} days`
+        : `between ${to} and ${from} days ago`;
+  const measure =
+    how === 'average' ? 'Average' : how === 'total' ? 'Number of days' : how === 'highest' ? 'Highest' : how === 'lowest' ? 'Lowest' : 'Value';
+  return `${measure} ${window}. Scores nothing at ${rule.low}, the full ${Math.abs(rule.points)} points at ${rule.high}.`;
+}
 
 export default function FactorDetailScreen(): React.ReactElement {
   const { palette } = useTheme();
   const router = useRouter();
-  const params = useLocalSearchParams<{ name?: string; label?: string }>();
-  const name = params.name ?? '';
+  const params = useLocalSearchParams<{ ruleId?: string; label?: string }>();
+  const ruleId = params.ruleId ?? '';
 
-  const feature = useMemo(() => model.features.find((f) => f.name === name), [name]);
-  const base = baseVariable(name);
+  const rule = useMemo(() => rulebook.rules.find((r) => r.id === ruleId), [ruleId]);
+  const base = rule?.variable ?? ruleId;
   const explanation = explanationFor(base);
-  const raises = (feature?.direction ?? 'increases') === 'increases';
-  const label = params.label ?? feature?.label ?? name;
+  const raises = (rule?.points ?? 1) >= 0;
+  const label = params.label ?? rule?.label ?? ruleId;
   const tint = raises ? palette.bandHighText : palette.bandLowText;
   const soft = raises ? palette.bandHighSoft : palette.bandLowSoft;
 
-  const nonZero = model.features.filter((f) => f.coefficient !== 0);
-  const rank = feature
-    ? [...nonZero].sort((a, b) => Math.abs(b.coefficient) - Math.abs(a.coefficient)).findIndex((f) => f.name === feature.name) + 1
+  const rank = rule
+    ? [...rulebook.rules]
+        .sort((a, b) => Math.abs(b.points) - Math.abs(a.points))
+        .findIndex((r) => r.id === rule.id) + 1
     : null;
 
   const resetCategory = categoryForVariable(base);
@@ -63,19 +79,22 @@ export default function FactorDetailScreen(): React.ReactElement {
         </Txt>
       </Reveal>
 
-      {feature ? (
+      {rule ? (
         <Reveal delay={60}>
           <Card level={2} style={{ marginTop: spacing.lg }}>
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md }}>
               <Txt variant="display" style={{ color: tint }}>
-                {feature.coefficient > 0 ? '+' : ''}
-                {feature.coefficient.toFixed(2)}
+                {rule.points > 0 ? '+' : ''}
+                {rule.points}
               </Txt>
               <Txt tone="muted" style={{ paddingBottom: 4, lineHeight: 17 }}>
-                {'standardized coefficient'}
-                {rank ? `\n${rank === 1 ? 'strongest' : `#${rank}`} of ${nonZero.length} non-zero features` : ''}
+                {'points at most'}
+                {rank ? `\n${rank === 1 ? 'heaviest' : `#${rank}`} of ${rulebook.rules.length} rules` : ''}
               </Txt>
             </View>
+            <Txt variant="caption" tone="faint" style={{ marginTop: spacing.md, lineHeight: 19 }}>
+              {ruleWindowReading(rule)}
+            </Txt>
           </Card>
         </Reveal>
       ) : null}
@@ -105,9 +124,9 @@ export default function FactorDetailScreen(): React.ReactElement {
         <Card tone="alt" level={1} style={{ marginTop: spacing.xl }}>
           <Kicker>Honest caveat</Kicker>
           <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 21 }}>
-            This is an association, not a cause, and it comes from a model trained on simulated
-            patients — not on your own history. It is not your "number one trigger", and Fleur
-            will never call it that.
+            This is an association, not a cause. The point value was written from published
+            research on trigger timing, not learned from your own history. It is not your
+            "number one trigger", and Fleur will never call it that.
           </Txt>
         </Card>
       </Reveal>

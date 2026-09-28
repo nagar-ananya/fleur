@@ -18,22 +18,32 @@ import React, {
   useState,
 } from 'react';
 
-import modelJson from '../../assets/model.json';
+
+import { getApiKey, forgetApiKey } from '../ai/keyStore';
+import { buildPayload } from '../ai/payload';
+import { AI_MODEL, askForSecondOpinion } from '../ai/secondOpinion';
 import { canFetch, fetchEnvironment, isStale, type Coordinates } from '../api/openMeteo';
-import { loadFeatureInputRows, getLastEnvironmentFetch, getProfile, insertPrediction,
+import { clearAiOpinions, getAiOpinion, getMeta, loadFeatureInputRows,
+  getLastEnvironmentFetch, getProfile, insertPrediction, saveAiOpinion, setMeta,
   saveCheckIn as saveCheckInRow, upsertEnvironment } from '../db/queries';
 import { resetDatabase, runMigrations } from '../db/migrations';
 import { DATABASE_NAME } from '../db/schema';
-import { latestFeatureVector, MIN_HISTORY_DAYS } from '../ml/features';
-import type { Model } from '../ml/model';
-import { deriveRiskState, type RiskState } from '../ml/risk';
-import type { CheckIn, Profile } from '../types/models';
+import { buildDailyFrame, checkinDayCount, MIN_HISTORY_DAYS } from '../logic/frame';
+import { rulebook } from '../logic/rulebook';
+import { deriveRiskState, type RiskState } from '../logic/risk';
+import type { CheckIn, Profile, StoredAiOpinion } from '../types/models';
 import { todayLocal } from '../utils/dates';
 
-export const model = modelJson as unknown as Model;
-export type { RiskState } from '../ml/risk';
+export { rulebook };
+export type { RiskState } from '../logic/risk';
 
 export type EnvironmentStatus = 'idle' | 'fetching' | 'ok' | 'unavailable';
+
+/** §17.1. `local` is the default and sends nothing anywhere. */
+export type AnalysisMode = 'local' | 'local_plus_ai';
+export type AiStatus = 'off' | 'loading' | 'ok' | 'unavailable';
+
+const ANALYSIS_MODE_KEY = 'analysis_mode';
 
 interface AppState {
   ready: boolean;
@@ -44,6 +54,11 @@ interface AppState {
   today: string;
   todayLogged: boolean;
   db: SQLite.SQLiteDatabase | null;
+  analysisMode: AnalysisMode;
+  aiOpinion: StoredAiOpinion | null;
+  aiStatus: AiStatus;
+  setAnalysisMode: (mode: AnalysisMode) => Promise<void>;
+  refreshAiOpinion: (force?: boolean) => Promise<void>;
   refresh: () => Promise<void>;
   saveCheckIn: (checkIn: CheckIn) => Promise<void>;
   setProfile: (profile: Profile) => void;
@@ -63,6 +78,11 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   const [environmentStatus, setEnvironmentStatus] = useState<EnvironmentStatus>('idle');
   const [checkinDays, setCheckinDays] = useState(0);
   const [todayLogged, setTodayLogged] = useState(false);
+  const [analysisMode, setAnalysisModeState] = useState<AnalysisMode>('local');
+  const [aiOpinion, setAiOpinion] = useState<StoredAiOpinion | null>(null);
+  const [aiStatus, setAiStatus] = useState<AiStatus>('off');
+  /** Stops two Today mounts firing the same paid call. */
+  const aiInFlight = useRef(false);
   const today = todayLocal();
 
   /** FR-4.1/FR-4.3: recompute entirely on-device, no network involved. */
@@ -77,12 +97,11 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     // adb logcat instead of looking like a scoring bug.
     try {
       const rows = await loadFeatureInputRows(db, todayLocal());
-      const { checkinDays: days } = latestFeatureVector(rows);
-      setCheckinDays(days);
+      setCheckinDays(checkinDayCount(buildDailyFrame(rows)));
       setTodayLogged(rows.some((r) => r.date === todayLocal() && r.severity !== null &&
         r.severity !== undefined));
 
-      const next = deriveRiskState(rows, model);
+      const next = deriveRiskState(rows, rulebook);
       setRisk(next);
 
       // §6.5: append-only log so predictions can be evaluated later. Best
@@ -93,10 +112,11 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
           await insertPrediction(db, {
             computedAt: new Date().toISOString(),
             forDate: next.date,
-            probability: next.probability,
+            probability: next.score / 100,
             band: next.band,
-            modelVersion: model.model_version,
-            topFeatures: next.drivers.map((c) => ({ feature: c.name, contribution: c.contribution })),
+            modelVersion: rulebook.rulebook_version,
+            topFeatures: next.drivers.map((r) => ({ feature: r.id, contribution: r.points })),
+            source: 'local',
           });
         } catch (error) {
           console.error('[fleur] could not log prediction (risk value is still correct)', error);
@@ -106,6 +126,97 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       console.error('[fleur] recompute failed — the shown risk value is now stale', error);
     }
   }, []);
+
+  /**
+   * Asks the AI, at most once a day, and only when the user has opted in.
+   * Every failure path lands on 'unavailable' — the Today screen already has a
+   * real score by the time this runs, so nothing here is worth an error state.
+   */
+  const refreshAiOpinion = useCallback(
+    async (force = false): Promise<void> => {
+      const db = dbRef.current;
+      if (!db) return;
+
+      const mode = (await getMeta(db, ANALYSIS_MODE_KEY)) as AnalysisMode | null;
+      if (mode !== 'local_plus_ai') {
+        setAiStatus('off');
+        setAiOpinion(null);
+        return;
+      }
+
+      const date = todayLocal();
+      if (!force) {
+        const cached = await getAiOpinion(db, date);
+        if (cached) {
+          setAiOpinion(cached);
+          setAiStatus('ok');
+          return;
+        }
+      }
+
+      if (aiInFlight.current) return;
+      aiInFlight.current = true;
+      setAiStatus('loading');
+      try {
+        const apiKey = await getApiKey();
+        if (!apiKey) {
+          setAiStatus('unavailable');
+          return;
+        }
+
+        const rows = await loadFeatureInputRows(db, date);
+        const frame = buildDailyFrame(rows);
+        if (frame.dates.length === 0) {
+          setAiStatus('unavailable');
+          return;
+        }
+
+        const opinion = await askForSecondOpinion(
+          buildPayload(frame, frame.dates.length - 1),
+          apiKey,
+        );
+        if (!opinion) {
+          setAiStatus('unavailable');
+          return;
+        }
+
+        const stored: StoredAiOpinion = {
+          date,
+          score: opinion.score,
+          band: opinion.band,
+          factorIds: opinion.factorIds,
+          summary: opinion.summary,
+          model: AI_MODEL,
+          createdAt: new Date().toISOString(),
+        };
+        await saveAiOpinion(db, stored);
+        setAiOpinion(stored);
+        setAiStatus('ok');
+      } catch (error) {
+        console.warn('[fleur] AI second opinion unavailable', error);
+        setAiStatus('unavailable');
+      } finally {
+        aiInFlight.current = false;
+      }
+    },
+    [],
+  );
+
+  const setAnalysisMode = useCallback(
+    async (mode: AnalysisMode): Promise<void> => {
+      const db = dbRef.current;
+      if (!db) return;
+      await setMeta(db, ANALYSIS_MODE_KEY, mode);
+      setAnalysisModeState(mode);
+      if (mode === 'local') {
+        setAiStatus('off');
+        setAiOpinion(null);
+      } else {
+        await refreshAiOpinion();
+      }
+    },
+    [refreshAiOpinion],
+  );
 
   const refresh = useCallback(async (): Promise<void> => {
     const db = dbRef.current;
@@ -127,6 +238,8 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
         if (cancelled) return;
         dbRef.current = db;
         setProfileState(await getProfile(db));
+        const mode = (await getMeta(db, ANALYSIS_MODE_KEY)) as AnalysisMode | null;
+        if (!cancelled && mode === 'local_plus_ai') setAnalysisModeState(mode);
         await recompute();
       } catch (error) {
         console.error('[fleur] database init failed', error);
@@ -139,14 +252,25 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     };
   }, [recompute]);
 
+  // Deliberately its own effect, after `ready`: a slow or failed network call
+  // must not hold up the local score, which is the number actually on screen.
+  useEffect(() => {
+    if (!ready || analysisMode !== 'local_plus_ai') return;
+    void refreshAiOpinion();
+  }, [ready, analysisMode, refreshAiOpinion]);
+
   const saveCheckIn = useCallback(
     async (checkIn: CheckIn): Promise<void> => {
       const db = dbRef.current;
       if (!db) return;
       await saveCheckInRow(db, checkIn);
       await recompute(); // FR-4.3
+      // Today's numbers moved, so a cached AI answer for today is stale.
+      if (checkIn.date === todayLocal() && analysisMode === 'local_plus_ai') {
+        await refreshAiOpinion(true);
+      }
     },
-    [recompute],
+    [recompute, analysisMode, refreshAiOpinion],
   );
 
   const setProfile = useCallback((next: Profile): void => {
@@ -202,9 +326,13 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     const db = dbRef.current;
     if (!db) return;
     await resetDatabase(db);
+    await forgetApiKey();
     setProfileState(null);
     setCheckinDays(0);
     setTodayLogged(false);
+    setAnalysisModeState('local');
+    setAiOpinion(null);
+    setAiStatus('off');
     setEnvironmentStatus('idle');
     setRisk({ status: 'collecting', days: 0, required: MIN_HISTORY_DAYS });
   }, []);
@@ -219,13 +347,19 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       today,
       todayLogged,
       db: dbRef.current,
+      analysisMode,
+      aiOpinion,
+      aiStatus,
+      setAnalysisMode,
+      refreshAiOpinion,
       refresh,
       saveCheckIn,
       setProfile,
       refreshEnvironment,
       deleteAllData,
     }),
-    [ready, profile, risk, environmentStatus, checkinDays, today, todayLogged, refresh,
+    [ready, profile, risk, environmentStatus, checkinDays, today, todayLogged,
+     analysisMode, aiOpinion, aiStatus, setAnalysisMode, refreshAiOpinion, refresh,
      saveCheckIn, setProfile, refreshEnvironment, deleteAllData],
   );
 

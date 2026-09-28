@@ -39,7 +39,6 @@ import {
   type ResetCategory,
   type ResetCategoryKey,
 } from '../../src/constants/reset';
-import { baseVariable } from '../../src/constants/copy';
 import { useApp } from '../../src/hooks/appState';
 import { useTheme } from '../../src/hooks/useTheme';
 import { radius, spacing } from '../../src/theme';
@@ -64,7 +63,7 @@ export default function ResetScreen(): React.ReactElement {
     const categories: ResetCategoryKey[] = [];
     if (risk.status === 'ready') {
       for (const driver of risk.drivers) {
-        const category = categoryForVariable(baseVariable(driver.name));
+        const category = categoryForVariable(driver.variable);
         if (category && !categories.includes(category)) categories.push(category);
       }
     }

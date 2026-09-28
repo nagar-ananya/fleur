@@ -2,243 +2,202 @@
 
 > Existing psoriasis apps are diaries. Fleur is a forecast.
 
-A two-part monorepo: an offline Python pipeline that trains an L1 logistic
-regression on synthetic patients and exports it as a static JSON file, and an
-Expo app that bundles that file and does inference on-device in TypeScript.
+An Expo app that scores psoriasis flare risk for the next three days from your
+own check-ins, local weather, and (optionally) a wearable. Scoring is a
+**hand-written 12-rule points system** that runs entirely on the phone — no
+machine learning, no model file, no server.
 
 **No backend, no accounts, no cloud database.** All storage is local SQLite. The
 only outbound request in the product goes to Open-Meteo, carrying nothing but
-rounded coordinates.
+rounded coordinates — unless you switch on the optional AI second opinion, which
+is off by default and described below.
 
 Built against [`requirements/REQUIREMENTS.md`](requirements/REQUIREMENTS.md).
-Section references throughout the code (`§7.3`, `FR-4.2`, `SIM-6`) point back to it.
-
----
+The scoring design is in
+[`docs/rules-engine-design.md`](docs/rules-engine-design.md).
 
 ## Status
 
-| Milestone | State | Evidence |
-|---|---|---|
-| M1 — Simulator | ✅ | 295,500 rows (1500 patients), 9.26% flare rate, 23.9% idiopathic, deterministic under seed |
-| M2 — Model | ⚠️ **partial** | AP 0.391 (3.9× base rate); precision and VAL-2 short — see below |
-| M3 — Export | ✅ | `model.json` validates; all 95 features labelled; **parity test passes** |
-| M4 — App shell | ✅ | Bundles; SQLite migrates (schema v2); 5 tabs; onboarding completable |
-| M5 — Check-in | ✅ | Save/read/backfill/edit all covered by tests; backfill is now its own screen |
-| M6 — Integrations | ✅ | Open-Meteo cached and offline-readable; health behind flag, **off** (§10.2) |
-| M7 — Risk & Insights | ✅ | Live risk on Today; Insights chart; disclaimers on every risk screen |
-| **UI pass** | ✅ | Full visual redesign, verified on a Pixel 7 in light and dark |
-| **v2 redesign** | ✅ | Reset tab, 5-step check-in, dedicated factor/backfill screens, real elimination test |
-| M8 — Pilot | ⬜ | Not run — needs real testers |
-| M9 — Submission | ⬜ | Demo video and writeup outstanding |
+| | |
+|---|---|
+| Scoring | ✅ 12-rule points system, measured on 300 held-out simulated patients |
+| App | ✅ 5 tabs, 5-step check-in, backfill, Reset, Insights, CSV export |
+| Tests | ✅ 97 passing, `tsc --noEmit` clean |
+| Verified on device | ✅ Pixel 7, light and dark |
+| AI second opinion | ⚠️ built and wired, **unmeasured** — no accuracy claim is made for it |
+| Pilot testing | ⬜ not run |
+| Demo video | ⬜ outstanding |
 
-**130 TypeScript tests + 21 Python tests passing. `tsc --noEmit` clean.**
+---
+
+## How the score works
+
+Every risk factor is worth a number of points. Stress is worth up to 15. Being
+unwell recently is worth up to 10. Skin already climbing above your own
+two-week average is worth up to 60, because that is by far the strongest
+signal. Add up today's points, cap at 100, read off a band:
+
+| Band | Score |
+|---|---|
+| Low | 0–29 |
+| Elevated | 30–49 |
+| Higher than usual | 50–100 |
+
+That is the whole system. Twelve rules, whole numbers, one addition — and the
+app shows you the arithmetic, so you can check it by hand.
+
+The **time windows are not invented**: they come from `REQUIREMENTS.md` §7.4,
+which lists how long published research says each trigger takes to show up
+(stress 7–14 days, cold snap 1–3, Koebner 10–14, strep 14–21).
+
+The app shows a band and a score and **makes no claim about how often a flare
+actually follows**. The score is a tally, not a probability, and is never
+printed with a `%`.
+
+---
+
+## Does it work?
+
+Measured by `app/scripts/check-numbers.ts` — the app's own engine, run over
+**300 simulated patients held back** while the rules were written, 47,480
+scoreable days.
+
+| What Fleur said | How often | A flare actually followed within 3 days |
+|---|---|---|
+| Low (0–29) | 80.1% of days | **5.0%** |
+| Elevated (30–49) | 12.8% | **14.6%** |
+| Higher than usual (50–100) | 7.1% | **44.5%** |
+
+> When Fleur says "higher than usual", a flare followed almost half the time.
+> When it says "low", about 1 day in 20. Base rate across all days is 9.1%.
+
+It still finds real triggers: the simulator plants 2–3 hidden triggers per
+patient, and on top-band days the highest-scoring rule pointed at a genuinely
+planted one **54%** of the time, against ~15% by chance.
+
+These numbers live on Settings → Scoring, and nowhere else in the app.
+
+### Why there is no machine learning any more
+
+This project started with a trained L1 logistic regression on 1,500 simulated
+patients. Measuring what it had actually learned was the turning point:
+
+| Feature | Weight in the trained model |
+|---|---|
+| How far today sits above your 14-day average | **+0.86** — biggest by 4× |
+| Your usual level lately | −0.23 |
+| The other 69 features | ≤ 0.20 each |
+
+Its own report put `baseline_share_of_full` at **0.957** — those two terms alone
+recovered 95.7% of the full model. The machine learning had spent 295,500 rows
+discovering "skin that has already started moving tends to keep moving", which
+is one line of arithmetic.
+
+So it was replaced with rules, and the replacement measured. On an identical
+held-out row set the two scored **0.391** (trained model) against **0.385** for
+an earlier 16-rule version of the rulebook — essentially the same accuracy, with
+nothing learned from data. The shipped 12-rule version trades a little of that
+for far simpler rules a reader can check.
+
+**The honest part:** the rules inherit the trained model's biggest weakness
+exactly. Dropping every trigger rule and keeping only the two skin rules costs
+very little, because the §8.1 target counts flare *continuations*, not just
+onsets — a day already elevated is very likely to still be elevated tomorrow.
+That limitation lives in the target definition, not the choice of model, and
+switching to rules neither caused nor fixed it. It is the most interesting
+finding in the project and is reported rather than tuned away.
 
 ---
 
 ## Quickstart
 
-Build order is strict (§14): the ML pipeline must be complete before app work,
-because designing screens around a model that does not exist means building
-them twice.
+```bash
+cd app
+npm install
+npm test          # 97 tests
+npm run typecheck # strict, no any
+npx expo start
+```
 
-### 1. ML pipeline
+There is no build step for the scoring system — `assets/rulebook.json` is
+hand-written and read directly.
+
+### Re-measuring the numbers (optional)
+
+Only needed if you change a rule's points or marks. The simulator generates the
+held-out test data; it is not part of the product and never runs on a phone.
 
 ```bash
 cd ml
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+python fetch_archive.py              # real 2024 weather, cached
+python simulate.py --seed 20260729   # 1500 patients x 197 days -> data/synthetic_panel.csv
 
-python fetch_archive.py     # real 2024 weather for 8 European cities → data/weather_cache.json
-python simulate.py --seed 20260729   # 1500 patients × 197 days → data/synthetic_panel.csv
-python train.py             # → out/model.json inputs, out/report.md, out/figures/
-python export.py            # → out/model.json + out/parity_fixtures.json, copied to app/assets/
-pytest tests/ -q
+cd ../app
+npx tsx scripts/check-numbers.ts ../ml/data/synthetic_panel.csv
 ```
 
-`fetch_archive.py` caches to `ml/data/`; once it exists nothing else touches the
-network. Pass `--offline` to synthesise weather if the archive is unreachable.
-
-### 2. App
-
-```bash
-cd app
-npm install
-npm run test:parity   # §15.1 — the blocking gate. Run this first.
-npm test
-npm run typecheck
-npx expo start
-```
-
-The health integration needs a development build; it ships **off** and the app
-is fully functional without it (HD-2).
+Paste the printed band rates into `assets/rulebook.json` → `results`, and update
+`measured_at`. **The script trains nothing** — it runs the app's own `scoreDay`
+and counts how often a flare really followed.
 
 ---
 
-## Results
+## The simulator
 
-### Simulator (M1)
-
-1500 virtual patients × 197 days (see "Why 1500 patients" below), built on
-**real 2024 weather** pulled from the Open-Meteo archive for London, Berlin,
-Madrid, Stockholm, Rome, Warsaw, Dublin and Athens — so environmental
-correlations are genuine rather than noise (SIM-3).
+1500 virtual patients x 197 days, built on **real 2024 weather** from the
+Open-Meteo archive for eight European cities, so environmental correlations are
+genuine rather than noise.
 
 - **9.26%** flare-positive rate (§8.2 requires 6–12%)
-- **23.9%** of flares idiopathic (SIM-5 targets ~20%)
-- **15%** of check-in days missing, in runs of 1–4 (SIM-6)
-- Byte-identical output for a fixed seed (SIM-8)
+- **23.9%** of flares idiopathic
+- **15%** of check-in days missing, in runs of 1–4
+- Byte-identical output for a fixed seed
 
 Each patient gets 2–3 hidden triggers with per-variable lags and effect sizes,
 recorded in `data/ground_truth.json`. **Five variables are never planted** —
-`diet_dairy`, `itch`, `uv_index_max`, `pollen_total`, `humidity_mean_pct` —
-so trigger recovery is measured against real distractors. `diet_dairy` is the
+`diet_dairy`, `itch`, `uv_index_max`, `pollen_total`, `humidity_mean_pct` — so
+trigger recovery is measured against real distractors. `diet_dairy` is the
 interesting one: the most commonly *believed* psoriasis trigger, deliberately
 given zero effect.
 
-### Model (M2)
-
-L1 logistic regression, `C=0.01`, split by patient (1200 train / 300 test).
-
-| Metric | Result | §8.3 target | |
-|---|---|---|---|
-| Average precision | **0.391** | ≥ 0.30 | ✅ |
-| Precision @ threshold | 0.453 | ≥ 0.55 | ❌ |
-| Recall @ threshold | 0.349 | ≥ 0.35 | ❌ (0.0007 short) |
-| Planted-trigger share | **0.706** | ≥ 0.60 | ✅ |
-| VAL-1 trigger recovery | pass | | ✅ |
-| VAL-2 leakage | **fail** | | ❌ |
-| VAL-3 null test | pass | | ✅ |
-| VAL-4 temporal sanity | pass | | ✅ |
-
-AP 0.391 against a 0.099 base rate is a **3.9× lift**, and 71 of 95 coefficients
-survive L1 (up from 39 at N=200 — more patients gives the L1 selector enough
-statistical power to keep real, modest trigger effects instead of regularising
-them away in favour of the one dominant, low-noise signal).
-
-### The honest part: why VAL-2 fails
-
-This is the most important finding in the project, so it is reported rather than
-tuned away.
-
-| Feature set | Average precision (N=200, prior) | Average precision (N=1500, current) |
-|---|---|---|
-| All 95 features | 0.327 | **0.391** |
-| `severity_baseline` + `severity_delta` only | 0.345 | 0.374 |
-| Lag + roll features only (no severity terms) | 0.172 | 0.223 |
-| Base rate | 0.082 | 0.099 |
-| `baseline_share_of_full` (pass needs < 0.90) | **1.054** | **0.957** |
-
-**At N=200, the two severity terms alone beat the full model outright** — the
-clearest possible sign that the other 93 features were decoration. At N=1500
-the full model has decisively pulled ahead of that baseline (`0.957` vs. the
-`0.90` VAL-2 needs), and the trigger-only block's own lift over base rate held
-steady (2.1x → 2.25x) while carrying more of the total. The gap narrowed by
-more than half; it did not close.
-
-The cause is structural, in the §8.1 target definition:
-
-```
-flare_next_72h[t] = max(severity[t+1..t+3]) >= mean(severity[t-13..t]) + 3
-```
-
-Both sides are built from the same severity series. Because flares persist for
-days and the 14-day baseline lags behind them, a day that is *already* elevated
-is very likely to satisfy the condition tomorrow. The target therefore counts
-flare **continuations**, not just onsets — and continuations are predictable
-from current state without reference to any trigger.
-
-This was chased hard before being accepted, across two separate rounds of
-tuning. The first swept seven levers on the *mechanism* — clustering lags to
-the §7.4 latencies, centring the trigger response, severity noise level and
-persistence, flare decay rate, trigger prevalence concentration, and sparse
-threshold-based activation. Two produced real, principled improvements and are
-kept (below, "Two simulator bugs"). None separated trigger signal from severity
-momentum while holding the flare rate inside the mandated 6–12% band.
-
-The second round asked a different question: is the mechanism actually fine,
-and the model just underpowered? `simulate.py` was left completely untouched —
-same triggers, same lags, same decay, same noise — and only the *amount* of
-data was varied, holding a fixed 200-patient test block and growing the
-training set underneath it:
-
-| Training patients | AP (full model) | `baseline_share_of_full` |
-|---|---|---|
-| 160 | 0.317 | 1.026 |
-| 500 | 0.332 | 0.979 |
-| 1000 | 0.386 | 0.964 |
-| 1500 | 0.386 | 0.962 |
-| 2000 | 0.387 | 0.961 |
-| 2700 | 0.387 | 0.960 |
-
-That is a genuine, monotonic effect — more data lets L1 keep real trigger
-coefficients it would otherwise regularise away — and it is also a genuine
-plateau: 1000 → 2700 patients (2.7x the data, several extra minutes of CPU per
-run) moves the ratio all of `0.004`. Whatever headroom more patients alone can
-buy was captured by roughly 1000–1500; **1500** was adopted as a SPEC-DEVIATION
-from SIM-1/TR-1's literal 200 (see `ml/simulate.py`) because it sits just past
-that knee. Two mechanistic levers were re-tried at this larger scale in case
-more data had changed their effect — a shorter flare decay (0.70 → 0.55,
-recalibrated to hold the flare-rate band) and a lower trigger-activation
-threshold — and both still made the *overall* fit worse (AP fell to the
-0.22–0.30 range) for no consistent gain on the ratio, so neither was kept.
-
-Raising AP further by weakening the mechanism *is* easy — a longer flare decay
-pushed an earlier N=200 test to 0.40+ — but `AP_baseline_only` rose in lockstep
-every time, so the gain was pure momentum-riding and VAL-2 correctly rejected
-it. Optimising the headline number would have meant optimising away the thing
-the project exists to measure.
-
-**Consequence for the product:** the Insights screen still shows genuinely
-recovered triggers (VAL-1 passes; 71% of selected trigger variables were really
-planted). But the Today screen's number is still driven mostly by recent
-severity trajectory, now with a smaller (not zero) margin from real triggers
-on top. The risk-detail copy says so in plain language rather than implying
-the triggers are doing more work than they are.
-
-Two fixes worth trying next, neither attempted here: define the target on
-flare *onset* only (excluding days already above baseline + 3), which would
-cut directly at the continuation-vs-onset conflation above; and score
-per-patient rather than shipping one population model — though §2 rules the
-latter out for v1.
-
 ### Two simulator bugs this surfaced
 
-Both were real defects, found by taking VAL-2 seriously:
+Both were real defects, found by taking the validation seriously:
 
-1. **Ceiling artifact.** Trigger signals are non-negative by construction
-   (`max(0, ±z)`), so an uncentred accumulated response acted as a permanent
-   upward offset rather than an excursion. Severity piled up against the 0–10
-   ceiling — 7% of all days sat at exactly 10 — and `baseline + 3 > 10` made a
-   flare *arithmetically impossible* on 15.7% of rows. The model was learning
-   "predict no flare when the baseline is high". Centring the response fixed it
-   (ceiling-blocked rows: 15.7% → 0.3%).
-
-2. **Lag dilution.** Drawing each trigger's lag uniformly from 1–14 as SIM-2
-   literally specifies makes every population-level lag coefficient an average
-   over 14 latencies, diluting it to nothing. Sampling instead from the window
-   §7.4 documents for that trigger — stress 7–14 days, cold snaps 1–3, Koebner
-   10–14 — keeps the lags random and inside 1–14 while making them recoverable.
+1. **Ceiling artifact.** Trigger signals are non-negative by construction, so an
+   uncentred accumulated response acted as a permanent upward offset. Severity
+   piled up against the 0–10 ceiling — 7% of days sat at exactly 10 — and
+   `baseline + 3 > 10` made a flare *arithmetically impossible* on 15.7% of rows.
+   Centring the response fixed it (ceiling-blocked rows: 15.7% → 0.3%).
+2. **Lag dilution.** Drawing each trigger's lag uniformly from 1–14 makes every
+   population-level lag coefficient an average over 14 latencies, diluting it to
+   nothing. Sampling instead from the window §7.4 documents for that trigger
+   keeps the lags random and inside 1–14 while making them recoverable.
 
 ---
 
-## Parity — the test that matters
+## Optional: AI second opinion
 
-`ml/features.py` and `app/src/ml/features.ts` implement the same 95-feature spec
-twice. When they drift, the app produces confidently wrong predictions and
-nothing throws.
+Off by default. When switched on in Settings, Fleur also asks Claude for a
+second read on the same two weeks and shows it as a **separate card** that
+agrees or disagrees.
 
-`export.py` emits 10 windows from held-out patients with every feature value and
-the final probability as Python computed them; a Jest test replays them through
-the TypeScript implementation and asserts agreement to `1e-6`. The fixtures are
-chosen to exercise the §7.5 missing-data policy — 8 of 10 have gaps, including
-runs past the 3-day forward-fill cap, a date absent from the data entirely, and
-one window that trips the 40%-missing guard.
+- **The local score is always the number on Today.** The AI never replaces it.
+  Offline, no key, rate-limited, bad response — the score is unaffected, because
+  it was never waiting on the network.
+- **What gets sent:** 14 rows of numbers. No name, no dates, no location, no
+  notes, nothing from your profile.
+- **Your own API key**, stored in the device keystore. Fleur ships no key and
+  has no server. "Delete all data" clears it.
+- **It has not been measured** against the points system, so the app makes no
+  accuracy claim about it. It is also not reproducible — ask twice and it can
+  differ — which is the main reason the local score stays the headline.
 
-```bash
-cd app && npm run test:parity   # 42 assertions, blocking in CI
-```
-
-Regenerate the fixtures (`python ml/export.py`) whenever either side changes.
+This is a **deliberate deviation from PRIV-1/PRIV-2**, which say no user data
+leaves the device. It is opt-in, disclosed on its own screen showing the exact
+payload, and recorded in Spec deviations below.
 
 ---
 
@@ -246,36 +205,51 @@ Regenerate the fixtures (`python ml/export.py`) whenever either side changes.
 
 ```
 fleur/
-├── ml/                       Python — offline, never runs in production
-│   ├── features.py           SOURCE OF TRUTH for the 95-feature spec
+├── ml/                       Test-data generator. Not part of the product,
+│   ├── simulate.py             never runs on a phone, run by hand.
 │   ├── fetch_archive.py      real historical weather (cached)
-│   ├── simulate.py           200 synthetic patients + ground truth
-│   ├── train.py              training, hyperparameter sweep, report
-│   ├── validate.py           VAL-1..VAL-4
-│   ├── labels.py             feature name → human label
-│   ├── export.py             model.json + parity fixtures
-│   └── out/                  model.json, report.md, figures/
-└── app/                      Expo — bundles model.json, infers on-device
+│   ├── features.py           simulator support only
+│   └── data/                 gitignored — regenerate with simulate.py
+└── app/
+    ├── assets/rulebook.json  THE SCORING SYSTEM — hand-written, 12 rules
+    ├── scripts/
+    │   └── check-numbers.ts  re-measures the rulebook (trains nothing)
     ├── app/                  expo-router screens
     └── src/
+        ├── logic/            frame.ts, signals.ts, engine.ts, risk.ts, personal.ts
+        ├── ai/               optional second opinion (off by default)
         ├── db/               schema, migrations, queries (snake↔camel boundary)
-        ├── ml/               features.ts (MIRRORS features.py), scorer.ts, risk.ts
         ├── api/              openMeteo.ts, health.ts
         └── components/       hand-rolled SVG charts
 ```
+
+**The app consumes nothing from `ml/`.** No generated file, no bundled artifact,
+no import. Deleting the whole folder leaves a working app — you would just lose
+the ability to re-measure the numbers on Settings → Scoring.
 
 ## Testing
 
 | Suite | Command | Covers |
 |---|---|---|
-| Parity (blocking) | `cd app && npm run test:parity` | §15.1 TEST-1..4 |
-| App | `cd app && npm test` | scorer, features, database, API client, bands, slider geometry |
+| App | `cd app && npm test` | 97 tests: engine, signals, risk states, rulebook integrity, database, API client, chart geometry |
 | Types | `cd app && npm run typecheck` | `strict: true`, no `any` |
-| ML | `cd ml && pytest tests/ -q` | feature spec, target, guards, VAL-4 |
 
 Database tests run against **real SQLite** via Node's built-in engine, so schema
 CHECK constraints and upsert semantics are genuinely exercised — a stub would
 happily accept `severity = 47`.
+
+**The old blocking parity test is gone, and that is the point.** It existed
+because `ml/features.py` and `app/src/ml/features.ts` were two implementations
+of one 95-feature spec that could silently drift. The scoring engine is now
+written once, in TypeScript, and the measurement script runs that same code — so
+there is nothing left to keep in sync. What replaces it is a fast
+rulebook-integrity test: every rule points at a column the frame builds, every
+rule variable has explanation copy, ids are unique, bands are ordered, and no
+user-facing string claims a flare frequency.
+
+Worth knowing: the engine test asserts a worked example by hand —
+20.4 + 12.2 + 10.0 − 8.6 + … = 54.3 → **54 points, Elevated** — so a change that
+alters the arithmetic fails loudly.
 
 ## Interface
 
@@ -296,7 +270,7 @@ screen by screen on a physical Pixel 7 in both colour schemes.
   dots that fill in one per logged day. A bare "0 of 14" gave the user nothing
   to feel progress against; the two-week cold start is the app's hardest
   moment and now has a shape.
-- **Diverging Insights chart** — coefficients extend left or right of a shared
+- **Diverging Insights chart** — points extend left or right of a shared
   centre line, making direction structural rather than something you learn by
   reading a label. Words remain for anyone who cannot separate the colours.
 - **Lag timeline** — each factor's §7.4 latency window drawn on a 0–21 day
@@ -353,7 +327,7 @@ back-filling at 7 — so on a fresh install the dial, the contributor list and
 
 The seeded series mirrors what `ml/simulate.py` builds rather than being random
 noise: autocorrelated self-reports, a stressful stretch 8-13 days back and an
-illness episode 9-12 days back — both at lags the model can actually see, so
+illness episode 9-12 days back — both at lags the rules can actually see, so
 the contributor list has real content — plus a recent upward drift so the risk
 lands somewhere interesting. A fixed PRNG seed makes it reproducible, and it
 writes through the normal `saveCheckIn` path, so seeded rows are subject to the
@@ -367,50 +341,50 @@ check-in flow has to be exercised from.
 
 Every deviation carries a `// SPEC-DEVIATION:` comment at its site.
 
-1. **Trigger lag distribution** (`ml/simulate.py`) — per-variable windows from
+1. **No machine learning** (§8, §9) — the spec mandates L1 logistic regression
+   trained on the simulator, a `model.json` contract, and z-scored inference.
+   All of it is replaced by a hand-written points system. Rationale and
+   measurements: [`docs/rules-engine-design.md`](docs/rules-engine-design.md).
+   §7's 95-feature spec, §8's training procedure and §9's scoring algorithm are
+   superseded.
+2. **No parity test** (§15.1) — it was blocking because two languages
+   implemented one spec. There is now one implementation, so the test has
+   nothing to guard. Replaced by a rulebook-integrity test.
+3. **Score, not probability** (§9.4, §11.2) — the app shows 0–100 points and a
+   band, never a percentage, and makes no claim about how often a flare follows.
+   A frequency claim would need a measurement to stay true and would go stale
+   the moment a rule changed; a tally cannot.
+4. **Optional AI second opinion breaks PRIV-1/PRIV-2** — those say health data
+   MUST NOT leave the device, ever. The feature is off by default, needs an
+   explicit opt-in, shows the exact payload before sending, and transmits 14
+   rows of numbers with no name, dates, location, notes or profile. §5.3's "no
+   API keys anywhere" also no longer holds: the user supplies their own.
+5. **Trigger lag distribution** (`ml/simulate.py`) — per-variable windows from
    §7.4 instead of uniform 1–14. Rationale above.
-2. **Prior-corrected intercept** (`ml/train.py`) — TR-5 mandates
-   `class_weight='balanced'`, which inflates fitted probabilities to ~50%.
-   The intercept is shifted by the log prior odds so displayed percentages mean
-   what they say. Monotone, so AP is unchanged. (The spec's own example
-   `model.json` shows `intercept: -2.1436`, consistent with a calibrated model.)
-3. **Rolling-window `min_periods`** (`ml/features.py`) — the spec does not say
-   how many observations a window needs. Fixed at `{3:2, 7:5, 14:9}`, hardcoded
-   rather than computed, so the two languages cannot disagree on a float boundary.
-4. **Stepped check-in** (`app/checkin.tsx`) — §11.3 asks for one scrolling
-   form; this is five steps (Skin → Body & wearable → Food & events → Context
-   → Review & rescore), at the product owner's request, following the v2
-   redesign. Sections still save as exactly one row (FR-2.1), and §11.3's own
-   acceptance criterion — severity alone saves in 2 taps — is preserved.
-5. **Conditions strip on Today** (`app/(tabs)/index.tsx`) — not in §11.2's
-   "Contains" list. It shows the exact environmental inputs the model consumes,
-   which makes the forecast legible and justifies the location permission.
-6. **VAL-2 reporting** — the literal test (drop `_lag*` only) leaves every
-   `_roll*` column in place and understates the problem, so three additional
-   cuts are reported and the pass criterion is set on the honest comparison.
-7. **Reset tab** (`app/(tabs)/reset.tsx` and `app/reset-*.tsx`) — not in the
-   original spec; added in the v2 redesign as a non-treatment "lever on a
-   logged input" (movement, breathwork, eat, wind-down, skin, mood). "Today's
-   plan" is genuinely derived from `risk.drivers`; only one flagship item per
-   category carries authored step-by-step content (from the source design) —
-   the rest get an honest overview rather than an invented routine.
-8. **No per-day forecast breakdown on Today** — the source design shows a
-   three-day "chance it starts that day" row. The model only produces one
-   72-hour aggregate probability (§8.1); there is no real per-day sub-score,
-   so it is left out. Shown instead: today's probability against the mean of
-   your own past predictions ("usual"), computed from the `prediction` log.
-9. **Elimination test** (`src/hooks/useEliminationTest.ts`) — real, not
-   decorative: picks a candidate only from your current top drivers, runs a
-   genuine 14-day two-phase window, and compares real logged severity across
-   the two halves. Explicitly labelled as an uncontrolled before/after, never
-   a trial. This closes the "elimination-test feature" gap noted below in
-   earlier revisions of this README.
-10. **Per-factor "evidence" not reproduced** (`app/factor-detail.tsx`) — the
-    source design shows fabricated-looking per-feature validation bullets
-    (e.g. "recovered in 71% of held-out patients"). No such per-feature stat
-    exists in `metrics.json`, so `factor-detail.tsx` shows only real numbers:
-    the model's own coefficient, its rank among non-zero features, and the
-    curated (real, hand-written) lag explanation from `constants/copy.ts`.
+6. **Rolling-window `min_periods`** (`src/logic/frame.ts`) — the spec does not
+   say how many observations a window needs. Fixed at `{3:2, 7:5, 14:9}`.
+7. **Stepped check-in** (`app/checkin.tsx`) — §11.3 asks for one scrolling
+   form; this is five steps, at the product owner's request. Sections still save
+   as exactly one row (FR-2.1), and §11.3's own acceptance criterion — severity
+   alone saves in 2 taps — is preserved.
+8. **Conditions strip on Today** — not in §11.2's "Contains" list. It shows the
+   exact environmental inputs the weather rules read, which makes the score
+   legible and justifies the location permission.
+9. **Reset tab** — not in the original spec; added in the v2 redesign as a
+   non-treatment "lever on a logged input". "Today's plan" is genuinely derived
+   from `risk.drivers`.
+10. **No per-day forecast breakdown on Today** — the source design shows a
+    three-day "chance it starts that day" row. There is one 72-hour score and no
+    real per-day sub-score, so it is left out. Shown instead: today's score
+    against the mean of your own past scores.
+11. **Elimination test** (`src/hooks/useEliminationTest.ts`) — real, not
+    decorative: picks a candidate only from your current top drivers, runs a
+    genuine 14-day two-phase window, and compares real logged severity across
+    the two halves. Explicitly labelled as an uncontrolled before/after.
+12. **Insights shows your own data** (§11.4) — the spec's chart is population
+    coefficients. It now shows the average points each rule has contributed
+    across *your* logged days, with the authored rulebook weights as a second
+    chart. §11.4's required preamble is still verbatim.
 
 ## Not built (§2, binding)
 

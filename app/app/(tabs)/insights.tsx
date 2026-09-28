@@ -1,10 +1,10 @@
 /**
  * Insights — the trigger profile (REQUIREMENTS §11.4, FR-5.x).
  *
- * These are the model's coefficients, which *are* the trigger profile — that
- * is the whole argument for L1 logistic regression in §8.4. The preamble in
- * §11.4 is required verbatim, and §13.4 forbids ever calling anything "your #1
- * trigger".
+ * Two charts: what has actually been driving this person's score (averaged
+ * over their own logged days), and what the rulebook watches in general. The
+ * §11.4 preamble is required verbatim, and §13.4 forbids ever calling anything
+ * "your #1 trigger".
  *
  * v2 redesign additions: tapping a bar now opens the dedicated `/factor-detail`
  * screen (was an in-page bottom sheet); a static lag-reference table; and a
@@ -12,7 +12,7 @@
  */
 
 import { useRouter } from 'expo-router';
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 
 import { DivergingBars, type FactorBar } from '../../src/components/charts';
@@ -30,7 +30,11 @@ import {
 } from '../../src/components/primitives';
 import { INSIGHTS_PREAMBLE, INSIGHTS_SUBTITLE } from '../../src/constants/copy';
 import { ELIMINATION_CANDIDATES, useEliminationTest } from '../../src/hooks/useEliminationTest';
-import { model } from '../../src/hooks/appState';
+import { rulebook, useApp } from '../../src/hooks/appState';
+import { buildDailyFrame } from '../../src/logic/frame';
+import { ruleAverages, scoredDayCount } from '../../src/logic/personal';
+import { loadFeatureInputRows } from '../../src/db/queries';
+import { todayLocal } from '../../src/utils/dates';
 import { useTheme } from '../../src/hooks/useTheme';
 import { spacing } from '../../src/theme';
 
@@ -47,24 +51,47 @@ const LAG_REFERENCE: readonly { name: string; days: string }[] = [
 export default function InsightsScreen(): React.ReactElement {
   const { palette } = useTheme();
   const router = useRouter();
+  const { db, risk } = useApp();
+  const [personal, setPersonal] = useState<{ bars: FactorBar[]; days: number }>({
+    bars: [],
+    days: 0,
+  });
 
-  // FR-5.1: top 8 by absolute standardised coefficient. Renders correctly when
-  // the model has fewer than 8 nonzero coefficients (§11.4).
-  const bars = useMemo<FactorBar[]>(
+  // Averaged over the person's own logged days, not over simulated patients.
+  useEffect(() => {
+    if (!db) return;
+    void loadFeatureInputRows(db, todayLocal(), 120).then((rows) => {
+      const frame = buildDailyFrame(rows);
+      setPersonal({
+        bars: ruleAverages(frame, rulebook)
+          .slice(0, TOP_N)
+          .map((r) => ({
+            name: r.id,
+            label: r.label,
+            value: r.averagePoints,
+            direction: r.averagePoints >= 0 ? 'increases' : 'decreases',
+          })),
+        days: scoredDayCount(frame),
+      });
+    });
+  }, [db, risk]);
+
+  // What Fleur watches and how heavily — authored, the same for everyone.
+  const rulebookBars = useMemo<FactorBar[]>(
     () =>
-      [...model.features]
-        .filter((f) => f.coefficient !== 0)
-        .sort((a, b) => Math.abs(b.coefficient) - Math.abs(a.coefficient))
+      [...rulebook.rules]
+        .sort((a, b) => Math.abs(b.points) - Math.abs(a.points))
         .slice(0, TOP_N)
-        .map((f) => ({
-          name: f.name,
-          // FR-5.2: never render a raw feature name.
-          label: f.label,
-          value: f.coefficient,
-          direction: f.direction,
+        .map((r) => ({
+          name: r.id,
+          label: r.label,
+          value: r.points,
+          direction: r.points >= 0 ? 'increases' : 'decreases',
         })),
     [],
   );
+
+  const bars = personal.bars.length > 0 ? personal.bars : rulebookBars;
 
   return (
     <Screen contentStyle={{ paddingBottom: 120 }}>
@@ -100,22 +127,52 @@ export default function InsightsScreen(): React.ReactElement {
       </Reveal>
 
       <Reveal delay={140}>
-        <Card style={{ marginTop: spacing.lg }}>
-          {bars.length === 0 ? (
-            <Txt tone="muted">
-              This model has no active factors, which usually means it was trained with very
-              strong regularisation.
-            </Txt>
+        <Kicker style={{ marginTop: spacing.lg, marginBottom: spacing.sm }}>
+          {personal.bars.length > 0 ? 'What is driving your score' : 'What Fleur looks at'}
+        </Kicker>
+        <Card>
+          {personal.bars.length > 0 ? (
+            <DivergingBars
+              bars={personal.bars}
+              onSelect={(bar) =>
+                router.push({ pathname: '/factor-detail', params: { ruleId: bar.name, label: bar.label } })
+              }
+            />
           ) : (
             <DivergingBars
-              bars={bars}
+              bars={rulebookBars}
               onSelect={(bar) =>
-                router.push({ pathname: '/factor-detail', params: { name: bar.name, label: bar.label } })
+                router.push({ pathname: '/factor-detail', params: { ruleId: bar.name, label: bar.label } })
               }
             />
           )}
+          <Txt variant="caption" tone="faint" style={{ marginTop: spacing.md, lineHeight: 19 }}>
+            {personal.bars.length > 0
+              ? `Average points each factor has added across your own ${personal.days} scored ${personal.days === 1 ? 'day' : 'days'}.`
+              : 'Points each rule can add, written from published research on trigger timing — not learned from your data or anyone else’s. Your own numbers appear here once you have two weeks logged.'}
+          </Txt>
         </Card>
       </Reveal>
+
+      {personal.bars.length > 0 ? (
+        <Reveal delay={165}>
+          <Kicker style={{ marginTop: spacing.xl, marginBottom: spacing.sm }}>
+            What Fleur looks at
+          </Kicker>
+          <Card>
+            <DivergingBars
+              bars={rulebookBars}
+              onSelect={(bar) =>
+                router.push({ pathname: '/factor-detail', params: { ruleId: bar.name, label: bar.label } })
+              }
+            />
+            <Txt variant="caption" tone="faint" style={{ marginTop: spacing.md, lineHeight: 19 }}>
+              Points each rule can add at most. Written from published research on how long each
+              trigger takes to show up — not learned from your data or anyone else’s.
+            </Txt>
+          </Card>
+        </Reveal>
+      ) : null}
 
       <Reveal delay={190}>
         <Kicker style={{ marginTop: spacing.xl, marginBottom: spacing.sm }}>
@@ -142,7 +199,7 @@ export default function InsightsScreen(): React.ReactElement {
             </View>
           ))}
           <Txt variant="caption" tone="faint" style={{ marginTop: spacing.md, lineHeight: 18 }}>
-            The model looks back 14 days, so the 14–21 day streptococcal window is only partly
+            Fleur looks back 14 days, so the 14–21 day streptococcal window is only partly
             covered — a documented limitation.
           </Txt>
         </Card>
@@ -156,31 +213,33 @@ export default function InsightsScreen(): React.ReactElement {
             <IconBadge background={palette.aquaSoft} size={34}>
               <SparkIcon size={18} color={palette.aqua} />
             </IconBadge>
-            <Txt variant="heading">About this model</Txt>
+            <Txt variant="heading">How well it does</Txt>
           </View>
 
           <View style={{ flexDirection: 'row', marginTop: spacing.lg, gap: spacing.sm }}>
             <StatTile
-              value={model.metrics.average_precision.toFixed(2)}
-              label="Average precision"
+              value={`${Math.round(rulebook.results.flare_rate_when_high * 100)}%`}
+              label="Flare followed, top band"
               accent={palette.primary}
             />
             <StatTile
-              value={model.metrics.base_rate.toFixed(2)}
-              label="Base rate"
+              value={`${Math.round(rulebook.results.flare_rate_when_low * 100)}%`}
+              label="Flare followed, low band"
               accent={palette.textMuted}
             />
             <StatTile
-              value={`${model.metrics.n_train_patients}`}
-              label="Patients trained on"
+              value={`${rulebook.rules.length}`}
+              label="Rules"
               accent={palette.aqua}
             />
           </View>
 
           <Txt variant="caption" tone="faint" style={{ marginTop: spacing.lg, lineHeight: 19 }}>
-            Version {model.model_version} · L1 logistic regression · {model.horizon_hours}-hour
-            horizon. Built from simulated data, so it describes patterns across many people
-            rather than your own history, and it has not been clinically validated.
+            Version {rulebook.rulebook_version} · {rulebook.rules.length}-rule points system ·{' '}
+            {rulebook.horizon_hours}-hour horizon. Tested on{' '}
+            {rulebook.results.tested_on_days.toLocaleString()} days from simulated patients held
+            back from the design, so these describe the test set — not your own history — and
+            nothing here has been clinically validated.
           </Txt>
         </Card>
       </Reveal>
@@ -199,10 +258,12 @@ function EliminationTestCard({ bars }: { bars: readonly FactorBar[] }): React.Re
   const { palette } = useTheme();
   const { state, loaded, start, clear } = useEliminationTest();
 
+  // `bar.name` is a rule id; the elimination list is keyed by base variable.
   const candidate = useMemo(() => {
     for (const bar of bars) {
-      const match = ELIMINATION_CANDIDATES[bar.name];
-      if (match) return { variable: bar.name, label: match };
+      const variable = rulebook.rules.find((r) => r.id === bar.name)?.variable;
+      const match = variable ? ELIMINATION_CANDIDATES[variable] : undefined;
+      if (variable && match) return { variable, label: match };
     }
     return null;
   }, [bars]);

@@ -66,9 +66,9 @@ export interface CheckIn {
   notes: string | null;
   /**
    * Body areas affected, e.g. `['elbows', 'knees']`. Added for the v2 redesign
-   * check-in's "areas affected" step. Never fed to the model (§8.1's 95
-   * features are fixed) — this is UI-only context, stored comma-joined in the
-   * `checkin.areas` column and split back out here.
+   * check-in's "areas affected" step. No rule reads it — this is UI-only
+   * context, stored comma-joined in the `checkin.areas` column and split back
+   * out here.
    */
   areas: string[];
 }
@@ -152,10 +152,25 @@ export interface PredictionRecord {
   id: number;
   computedAt: string;
   forDate: string;
+  /** The 0-100 points score, stored as a fraction for the existing column. */
   probability: number;
   band: RiskBand;
   modelVersion: string;
   topFeatures: { feature: string; contribution: number }[];
+  /** Which scorer produced this row. */
+  source?: 'local' | 'ai';
+}
+
+/** A cached AI second opinion for one day (§17). */
+export interface StoredAiOpinion {
+  date: string;
+  score: number;
+  band: RiskBand;
+  factorIds: string[];
+  /** May be empty: dropped if it failed the §13.1 word check. */
+  summary: string;
+  model: string;
+  createdAt: string;
 }
 
 /** A blank check-in for `date`, used as the starting point for the form. */

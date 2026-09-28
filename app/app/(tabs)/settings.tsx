@@ -24,7 +24,7 @@ import { PressableScale, Reveal } from '../../src/components/motion';
 import { Card, IconBadge, Kicker, Screen, Txt } from '../../src/components/primitives';
 import { countCheckInDays, deleteCheckIn } from '../../src/db/queries';
 import { DEFAULT_SEED_DAYS, DEV_TOOLS_ENABLED, seedDemoCheckIns } from '../../src/dev/seed';
-import { model, useApp } from '../../src/hooks/appState';
+import { rulebook, useApp } from '../../src/hooks/appState';
 import { useTheme } from '../../src/hooks/useTheme';
 import { spacing } from '../../src/theme';
 import { formatLong, todayLocal } from '../../src/utils/dates';
@@ -33,14 +33,15 @@ const ROWS = [
   { key: 'profile', title: 'Profile', icon: PersonIcon, path: '/settings-profile' as const, destructive: false },
   { key: 'permissions', title: 'Permissions', icon: ShieldIcon, path: '/settings-permissions' as const, destructive: false },
   { key: 'export', title: 'Export as CSV', icon: ExportIcon, path: '/settings-export' as const, destructive: false },
-  { key: 'model', title: 'Model & disclaimer', icon: SparkIcon, path: '/settings-model' as const, destructive: false },
+  { key: 'ai', title: 'AI second opinion', icon: SparkIcon, path: '/settings-ai' as const, destructive: false },
+  { key: 'model', title: 'Scoring & disclaimer', icon: SparkIcon, path: '/settings-model' as const, destructive: false },
   { key: 'delete', title: 'Delete all data', icon: TrashIcon, path: '/settings-delete' as const, destructive: true },
 ] as const;
 
 export default function SettingsScreen(): React.ReactElement {
   const { palette } = useTheme();
   const router = useRouter();
-  const { profile, db, refresh } = useApp();
+  const { profile, db, refresh, analysisMode } = useApp();
   const [days, setDays] = useState(0);
   const [seeding, setSeeding] = useState(false);
   const [clearing, setClearing] = useState(false);
@@ -57,8 +58,10 @@ export default function SettingsScreen(): React.ReactElement {
           : undefined;
       case 'export':
         return `${days} check-${days === 1 ? 'in' : 'ins'} logged`;
+      case 'ai':
+        return analysisMode === 'local_plus_ai' ? 'On · sends numbers once a day' : 'Off · nothing leaves this phone';
       case 'model':
-        return `v${model.model_version} · trained ${model.trained_at.slice(0, 10)}`;
+        return `v${rulebook.rulebook_version} · ${rulebook.rules.length} rules · no ML`;
       case 'delete':
         return 'Irreversible · requires a typed confirmation';
       default:

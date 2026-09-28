@@ -1,0 +1,193 @@
+{
+  "schema_version": 1,
+  "rulebook_version": "2.0.0",
+  "authored_at": "2026-09-27",
+  "horizon_hours": 72,
+  "min_days_required": 14,
+  "bands": {
+    "elevated": 30,
+    "high": 50
+  },
+  "results": {
+    "_note": "Measured by app/scripts/check-numbers.ts using the app's own engine. Shown on Settings > Scoring only, never as a claim about the user's own risk. Re-run after any change to rules[] or bands.",
+    "measured_at": "2026-09-27",
+    "panel_seed": 20260729,
+    "tested_on_patients": "1201-1500",
+    "tested_on_days": 47480,
+    "base_rate": 0.0906,
+    "flare_rate_when_high": 0.445,
+    "flare_rate_when_low": 0.05,
+    "recall_at_high": 0.347,
+    "average_precision": 0.36,
+    "trigger_recovery": 0.544,
+    "trigger_recovery_by_chance": 0.147
+  },
+  "rules": [
+    {
+      "id": "skin_climbing",
+      "label": "Your skin is above your own two-week average",
+      "variable": "severity_delta",
+      "points": 60,
+      "look_at": {
+        "column": "severity_delta",
+        "how": "today"
+      },
+      "low": 0,
+      "high": 4
+    },
+    {
+      "id": "stress",
+      "label": "Stress a week or two ago",
+      "variable": "stress",
+      "points": 15,
+      "look_at": {
+        "column": "stress",
+        "how": "average",
+        "from": 7,
+        "to": 14
+      },
+      "low": 2,
+      "high": 8
+    },
+    {
+      "id": "illness",
+      "label": "You were unwell a week or two ago",
+      "variable": "illness",
+      "points": 10,
+      "look_at": {
+        "column": "illness",
+        "how": "highest",
+        "from": 7,
+        "to": 14
+      },
+      "low": 0,
+      "high": 1
+    },
+    {
+      "id": "short_sleep",
+      "label": "Short sleep this week",
+      "variable": "sleep_hours",
+      "points": 10,
+      "look_at": {
+        "column": "sleep_hours",
+        "how": "average",
+        "from": 0,
+        "to": 6
+      },
+      "low": 8,
+      "high": 5
+    },
+    {
+      "id": "itch",
+      "label": "Itch over the last few days",
+      "variable": "itch",
+      "points": 5,
+      "look_at": {
+        "column": "itch",
+        "how": "average",
+        "from": 0,
+        "to": 2
+      },
+      "low": 3,
+      "high": 8
+    },
+    {
+      "id": "sore_throat",
+      "label": "Sore throat about two weeks ago",
+      "variable": "sore_throat",
+      "points": 5,
+      "look_at": {
+        "column": "sore_throat",
+        "how": "highest",
+        "from": 10,
+        "to": 14
+      },
+      "low": 0,
+      "high": 1
+    },
+    {
+      "id": "skin_injury",
+      "label": "Skin injury about two weeks ago",
+      "variable": "skin_injury",
+      "points": 5,
+      "look_at": {
+        "column": "skin_injury",
+        "how": "highest",
+        "from": 10,
+        "to": 14
+      },
+      "low": 0,
+      "high": 1
+    },
+    {
+      "id": "alcohol",
+      "label": "Alcohol over the last five days",
+      "variable": "alcohol_units",
+      "points": 5,
+      "look_at": {
+        "column": "alcohol_units",
+        "how": "average",
+        "from": 0,
+        "to": 4
+      },
+      "low": 0,
+      "high": 4
+    },
+    {
+      "id": "processed_food",
+      "label": "Processed-food days this week",
+      "variable": "diet_processed",
+      "points": 5,
+      "look_at": {
+        "column": "diet_processed",
+        "how": "total",
+        "from": 0,
+        "to": 6
+      },
+      "low": 0,
+      "high": 5
+    },
+    {
+      "id": "pollution",
+      "label": "Air pollution over the last three days",
+      "variable": "pm2_5",
+      "points": 5,
+      "look_at": {
+        "column": "pm2_5",
+        "how": "average",
+        "from": 0,
+        "to": 2
+      },
+      "low": 10,
+      "high": 35
+    },
+    {
+      "id": "cold_snap",
+      "label": "A sharp temperature drop this week",
+      "variable": "temp_delta_1d",
+      "points": 5,
+      "look_at": {
+        "column": "temp_delta_1d",
+        "how": "lowest",
+        "from": 1,
+        "to": 3
+      },
+      "low": -2,
+      "high": -8
+    },
+    {
+      "id": "sunshine",
+      "label": "Sunshine over the past week",
+      "variable": "uv_index_max",
+      "points": -10,
+      "look_at": {
+        "column": "uv_index_max",
+        "how": "average",
+        "from": 0,
+        "to": 6
+      },
+      "low": 2,
+      "high": 7
+    }
+  ]
+}

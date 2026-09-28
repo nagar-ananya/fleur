@@ -211,7 +211,7 @@ export default function BackfillScreen(): React.ReactElement {
             style={{ marginTop: spacing.xl }}
           />
           <Txt variant="caption" tone="faint" style={{ marginTop: spacing.md, lineHeight: 18 }}>
-            Saving a past date rebuilds every lag window that touches it, then rescores today.
+            Saving a past date rebuilds every rule window that reaches it, then rescores today.
           </Txt>
         </Reveal>
       ) : null}
