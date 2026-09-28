@@ -1,5 +1,5 @@
 import { buildDailyFrame, type FrameInputRow } from '../frame';
-import { bandFor, helpingFactors, scoreDay, topDrivers } from '../engine';
+import { bandFor, helpingFactors, scoreDay, topDrivers, wholeParts } from '../engine';
 import { rulebook } from '../rulebook';
 
 const DAYS = 20;
@@ -130,5 +130,15 @@ describe('missing data', () => {
     const result = scoreDay(frame, frame.dates.length - 1, rulebook);
     expect(result.score).toBeGreaterThanOrEqual(0);
     expect(result.score).toBeLessThanOrEqual(100);
+  });
+});
+
+describe('wholeParts', () => {
+  it('rounds each part so they add up to the rounded total', () => {
+    const values = [20.4, 9.6, 4.4, 3.3, -2.6];
+    const parts = wholeParts(values);
+    expect(parts.every(Number.isInteger)).toBe(true);
+    expect(parts.reduce((t, v) => t + v, 0)).toBe(Math.round(values.reduce((t, v) => t + v, 0)));
+    parts.forEach((p, i) => expect(Math.abs(p - values[i])).toBeLessThan(1));
   });
 });

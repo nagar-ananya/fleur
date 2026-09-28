@@ -7,7 +7,13 @@
  * preview must not have.
  */
 
-import { buildDailyFrame, canPredict, checkinDayCount, MIN_HISTORY_DAYS } from './frame';
+import {
+  buildDailyFrame,
+  canPredict,
+  checkinDayCount,
+  MIN_HISTORY_DAYS,
+  RECENT_WINDOW,
+} from './frame';
 import type { FrameInputRow } from './frame';
 import { scoreDay, topDrivers, helpingFactors, type RuleScore } from './engine';
 import type { Rulebook, RiskBand } from './rulebook';
@@ -28,7 +34,14 @@ export type RiskState =
       helping: readonly RuleScore[];
       /** Every rule that scored anything, for the full breakdown. */
       rules: readonly RuleScore[];
+      /** The last `RECENT_WINDOW` days scored the same way, oldest first, for per-rule charts. */
+      history: readonly DayRules[];
     };
+
+export interface DayRules {
+  readonly date: string;
+  readonly rules: readonly RuleScore[];
+}
 
 export function deriveRiskState(rows: readonly FrameInputRow[], book: Rulebook): RiskState {
   const frame = buildDailyFrame(rows);
@@ -44,6 +57,11 @@ export function deriveRiskState(rows: readonly FrameInputRow[], book: Rulebook):
   }
 
   const result = scoreDay(frame, index, book);
+  const first = Math.max(0, index - RECENT_WINDOW + 1);
+  const history: DayRules[] = [];
+  for (let i = first; i <= index; i += 1) {
+    history.push({ date: frame.dates[i], rules: scoreDay(frame, i, book).rules });
+  }
   return {
     status: 'ready',
     score: result.score,
@@ -52,6 +70,7 @@ export function deriveRiskState(rows: readonly FrameInputRow[], book: Rulebook):
     drivers: topDrivers(result),
     helping: helpingFactors(result),
     rules: result.rules,
+    history,
   };
 }
 

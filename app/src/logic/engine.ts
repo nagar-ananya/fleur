@@ -77,3 +77,22 @@ export function helpingFactors(result: RiskScore, limit = TOP_RULE_COUNT): reado
     .sort((a, b) => a.points - b.points)
     .slice(0, limit);
 }
+
+/**
+ * Whole numbers that still add up: rounds each value so the rounded parts sum
+ * to the rounded total (largest-remainder), so a list of "+9", "+4", "−2"
+ * never disagrees with the total printed under it.
+ */
+export function wholeParts(values: readonly number[]): number[] {
+  const floors = values.map(Math.floor);
+  let short = Math.round(values.reduce((t, v) => t + v, 0)) - floors.reduce((t, v) => t + v, 0);
+  const order = values
+    .map((v, i) => ({ i, rest: v - floors[i] }))
+    .sort((a, b) => b.rest - a.rest);
+  for (const { i } of order) {
+    if (short <= 0) break;
+    floors[i] += 1;
+    short -= 1;
+  }
+  return floors;
+}

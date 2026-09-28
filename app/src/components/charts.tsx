@@ -669,3 +669,116 @@ export function MiniRing({
 
 export { radius as chartRadius };
 export type { Palette as ChartPalette };
+
+// --------------------------------------------------------------------------
+// Rule history
+// --------------------------------------------------------------------------
+
+/**
+ * One rule's points, day by day — a big, plain line for the rule detail page.
+ * The dashed line on top is the most the rule can ever add, so "how close to
+ * full" reads without any numbers. Missing days break the line.
+ */
+export function RuleChart({
+  points,
+  max,
+  color,
+  height = 220,
+}: {
+  points: readonly TrendPoint[];
+  /** The rule's maximum, as a positive number. */
+  max: number;
+  color: string;
+  height?: number;
+}): React.ReactElement {
+  const { palette } = useTheme();
+  const [width, setWidth] = useState(0);
+  const fillId = useId().replace(/:/g, '');
+
+  const axis = 34;
+  const plotWidth = Math.max(0, width - axis);
+  const top = 12;
+  const bottom = height - 26;
+  const step = points.length > 1 ? plotWidth / (points.length - 1) : 0;
+  const yFor = (value: number): number => bottom - (Math.min(value, max) / max) * (bottom - top);
+
+  const { segments, areas, last } = useMemo(() => {
+    const segs: string[] = [];
+    const ars: string[] = [];
+    let line = '';
+    let startX = 0;
+    let prevX = 0;
+    let lastDot: { x: number; y: number } | null = null;
+    const close = (): void => {
+      if (!line) return;
+      segs.push(line);
+      ars.push(`${line} L ${prevX} ${bottom} L ${startX} ${bottom} Z`);
+      line = '';
+    };
+    points.forEach((p, i) => {
+      const x = axis + i * step;
+      if (p.value === null) {
+        close();
+        return;
+      }
+      const y = yFor(p.value);
+      if (!line) {
+        line = `M ${x} ${y}`;
+        startX = x;
+      } else {
+        line += ` L ${x} ${y}`;
+      }
+      prevX = x;
+      lastDot = { x, y };
+    });
+    close();
+    return { segments: segs, areas: ars, last: lastDot as { x: number; y: number } | null };
+  }, [points, step, max, bottom]);
+
+  return (
+    <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ height }}>
+      {width > 0 ? (
+        <Svg width={width} height={height}>
+          <Defs>
+            <LinearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={color} stopOpacity={0.28} />
+              <Stop offset="1" stopColor={color} stopOpacity={0} />
+            </LinearGradient>
+          </Defs>
+          <Line x1={axis} y1={top} x2={width} y2={top} stroke={palette.borderStrong} strokeDasharray="4 4" />
+          <Line x1={axis} y1={bottom} x2={width} y2={bottom} stroke={palette.border} />
+          {areas.map((d, i) => (
+            <Path key={`a${i}`} d={d} fill={`url(#${fillId})`} />
+          ))}
+          {segments.map((d, i) => (
+            <Path
+              key={`s${i}`}
+              d={d}
+              stroke={color}
+              strokeWidth={3}
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ))}
+          {last ? <Circle cx={last.x} cy={last.y} r={6} fill={color} /> : null}
+        </Svg>
+      ) : null}
+      <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: top - 8 }}>
+        <Txt variant="caption" tone="faint">{`${max}`}</Txt>
+      </View>
+      <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: bottom - 9 }}>
+        <Txt variant="caption" tone="faint">0</Txt>
+      </View>
+      {points.length > 0 ? (
+        <View
+          pointerEvents="none"
+          style={{ position: 'absolute', left: axis, right: 0, bottom: 0, flexDirection: 'row', justifyContent: 'space-between' }}
+        >
+          <Txt variant="caption" tone="faint">{formatShort(points[0].date)}</Txt>
+          <Txt variant="caption" tone="faint">Today</Txt>
+        </View>
+      ) : null}
+    </View>
+  );
+}
