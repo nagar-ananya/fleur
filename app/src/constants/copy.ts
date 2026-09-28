@@ -23,9 +23,6 @@ export const INSIGHTS_PREAMBLE =
   'These are patterns, not proven causes. A factor appearing here means it moved ' +
   'together with flares in the data — not that it caused them.';
 
-/** §13.4: never "your #1 trigger". */
-export const INSIGHTS_SUBTITLE = 'What has been adding most to your score';
-
 /**
  * How Fleur states the headline number — used on both Today and
  * `/risk-detail` so the two never phrase the same score differently.
@@ -218,8 +215,7 @@ export function explanationFor(baseVariable: string): FactorExplanation {
   return (
     FACTOR_EXPLANATIONS[baseVariable] ?? {
       description:
-        'Fleur watches this factor because it has been associated with flares in ' +
-        'the training data.',
+        'Fleur watches this factor because published research links it to flares.',
       typicalLag: 'Varies.',
       lagFrom: 0,
       lagTo: 14,

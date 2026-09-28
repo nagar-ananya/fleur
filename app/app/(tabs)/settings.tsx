@@ -14,6 +14,7 @@ import { Alert, View } from 'react-native';
 
 import {
   ChevronRight,
+  CloseIcon,
   ExportIcon,
   PersonIcon,
   ShieldIcon,
@@ -61,7 +62,7 @@ export default function SettingsScreen(): React.ReactElement {
       case 'ai':
         return analysisMode === 'local_plus_ai' ? 'On · sends numbers once a day' : 'Off · nothing leaves this phone';
       case 'model':
-        return `v${rulebook.rulebook_version} · ${rulebook.rules.length} rules · no ML`;
+        return `v${rulebook.rulebook_version} · ${rulebook.rules.length} rules`;
       case 'delete':
         return 'Irreversible · requires a typed confirmation';
       default:
@@ -90,6 +91,13 @@ export default function SettingsScreen(): React.ReactElement {
     }
   };
 
+  const confirmClearToday = (): void => {
+    Alert.alert("Clear today's check-in?", 'Your answers for today will be removed so you can start again.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Clear', style: 'destructive', onPress: () => void onClearToday() },
+    ]);
+  };
+
   const onClearToday = async (): Promise<void> => {
     if (!db) return;
     setClearing(true);
@@ -101,15 +109,45 @@ export default function SettingsScreen(): React.ReactElement {
       Alert.alert(
         removed ? "Today's check-in cleared" : 'Nothing to clear',
         removed
-          ? `${formatLong(date)} is back to un-logged. Open Today to check in again.`
+          ? `${formatLong(date)} is back to not logged. Open Today to check in again.`
           : 'There was no check-in saved for today.',
       );
     } catch (error) {
       console.error('[fleur] could not clear today', error);
-      Alert.alert('Could not clear', 'See the Metro logs for details.');
+      Alert.alert('Could not clear', 'Something went wrong. Please try again.');
     } finally {
       setClearing(false);
     }
+  };
+
+  const renderRow = (row: (typeof ROWS)[number]): React.ReactElement => {
+    const Icon = row.icon;
+    return (
+      <PressableScale
+        key={row.key}
+        onPress={() => router.push(row.path)}
+        accessibilityLabel={row.title}
+        scaleTo={0.99}
+        style={{ marginBottom: spacing.sm }}
+      >
+        <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+          <IconBadge background={row.destructive ? palette.destructiveSoft : palette.surfaceAlt}>
+            <Icon size={18} color={row.destructive ? palette.destructive : palette.textMuted} />
+          </IconBadge>
+          <View style={{ flex: 1 }}>
+            <Txt variant="label" style={row.destructive ? { color: palette.destructive } : undefined}>
+              {row.title}
+            </Txt>
+            {subtitleFor(row.key) ? (
+              <Txt variant="caption" tone="faint" style={{ marginTop: 2 }}>
+                {subtitleFor(row.key)}
+              </Txt>
+            ) : null}
+          </View>
+          <ChevronRight size={17} color={palette.textFaint} />
+        </Card>
+      </PressableScale>
+    );
   };
 
   return (
@@ -123,35 +161,30 @@ export default function SettingsScreen(): React.ReactElement {
 
       <Reveal delay={70}>
         <View style={{ marginTop: spacing.lg }}>
-          {ROWS.map((row) => {
-            const Icon = row.icon;
-            return (
-              <PressableScale
-                key={row.key}
-                onPress={() => router.push(row.path)}
-                accessibilityLabel={row.title}
-                scaleTo={0.99}
-                style={{ marginBottom: spacing.sm }}
-              >
-                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-                  <IconBadge background={row.destructive ? palette.destructiveSoft : palette.surfaceAlt}>
-                    <Icon size={18} color={row.destructive ? palette.destructive : palette.textMuted} />
-                  </IconBadge>
-                  <View style={{ flex: 1 }}>
-                    <Txt variant="label" style={row.destructive ? { color: palette.destructive } : undefined}>
-                      {row.title}
-                    </Txt>
-                    {subtitleFor(row.key) ? (
-                      <Txt variant="caption" tone="faint" style={{ marginTop: 2 }}>
-                        {subtitleFor(row.key)}
-                      </Txt>
-                    ) : null}
-                  </View>
-                  <ChevronRight size={17} color={palette.textFaint} />
-                </Card>
-              </PressableScale>
-            );
-          })}
+          {ROWS.filter((row) => !row.destructive).map(renderRow)}
+
+          <PressableScale
+            onPress={confirmClearToday}
+            accessibilityLabel="Clear today's check-in"
+            scaleTo={0.99}
+            style={{ marginBottom: spacing.sm }}
+          >
+            <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+              <IconBadge background={palette.surfaceAlt}>
+                <CloseIcon size={16} color={palette.textMuted} />
+              </IconBadge>
+              <View style={{ flex: 1 }}>
+                <Txt variant="label">{clearing ? 'Clearing…' : "Clear today's check-in"}</Txt>
+                <Txt variant="caption" tone="faint" style={{ marginTop: 2 }}>
+                  Start today's answers over
+                </Txt>
+              </View>
+              <ChevronRight size={17} color={palette.textFaint} />
+            </Card>
+          </PressableScale>
+
+          {ROWS.filter((row) => row.destructive).map(renderRow)}
+
         </View>
       </Reveal>
 
@@ -177,11 +210,6 @@ export default function SettingsScreen(): React.ReactElement {
               <PressableScale onPress={() => void onSeed()} accessibilityLabel="Seed demo data">
                 <Txt variant="label" tone="accent">
                   {seeding ? 'Seeding…' : `Seed ${DEFAULT_SEED_DAYS} days of demo data`}
-                </Txt>
-              </PressableScale>
-              <PressableScale onPress={() => void onClearToday()} accessibilityLabel="Clear today's check-in">
-                <Txt variant="label" tone="accent">
-                  {clearing ? 'Clearing…' : "Clear today's check-in"}
                 </Txt>
               </PressableScale>
             </View>

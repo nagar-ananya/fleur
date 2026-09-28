@@ -21,7 +21,6 @@ export default function SettingsModelScreen(): React.ReactElement {
 
   const facts = [
     { k: 'SCORING', v: `${rulebook.rules.length}-rule points system` },
-    { k: 'MACHINE LEARNING', v: 'None' },
     { k: 'HORIZON', v: `${rulebook.horizon_hours} hours` },
     { k: 'BANDS', v: `${bands.elevated} / ${bands.high}` },
     { k: 'WRITTEN', v: rulebook.authored_at },
@@ -70,20 +69,16 @@ export default function SettingsModelScreen(): React.ReactElement {
           </View>
         ))}
         <Txt variant="caption" tone="faint" style={{ lineHeight: 18 }}>
-          {`Measured on ${results.tested_on_days.toLocaleString()} days from simulated patients (${results.tested_on_patients}) held back while the rules were written. Useful, not clinical.`}
+          {`Measured on ${results.tested_on_days.toLocaleString()} days of simulated patients. Useful, not clinical.`}
         </Txt>
       </Card>
 
       <Kicker style={{ marginTop: spacing.xl, marginBottom: spacing.md }}>
-        Why there is no machine learning
+        How the score works
       </Kicker>
       <Card>
         <Txt tone="muted" style={{ lineHeight: 22 }}>
-          This started as a trained machine-learning model. Measuring what it had actually
-          learned showed almost all of it came down to one thing — whether your skin is already
-          climbing above its own average — so the model was replaced with rules anyone can read.
-          On the same held-out patients the rules reach about the same accuracy, with nothing
-          learned from data.
+          {`Fleur checks ${rulebook.rules.length} rules against your last two weeks. Each rule comes from published research on what can set off a flare, and adds up to a set number of points. Add them up and you get your score, from 0 to 100.`}
         </Txt>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.lg }}>
           <Txt variant="caption" tone="faint">Base rate (any random day)</Txt>

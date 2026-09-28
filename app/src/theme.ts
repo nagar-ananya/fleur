@@ -6,13 +6,12 @@
  *
  *   - No red and no alarm palette anywhere near risk. The top band is coral,
  *     labelled "High", never "Warning".
- *   - Light and dark are both first-class, not an afterthought toggle.
- *   - Colour never carries meaning alone; every band pairs with a text label.
+ *  *   - Colour never carries meaning alone; every band pairs with a text label.
  *   - Touch targets are at least 44pt.
  *
- * Within that, the system is deliberately warm and saturated rather than
- * clinical: iris and aqua for brand, a calm sequential ramp for severity, and
- * soft aurora washes for depth. Every text colour below was checked against
+ * Within that, the app uses one light "notebook" look: warm paper, dark ink,
+ * a single blue accent and flat colours. The dark palette is kept for
+ * reference but not used (see `useTheme`). Every text colour below was checked against
  * its intended background for WCAG AA (4.5:1 body, 3:1 large).
  */
 
@@ -79,52 +78,56 @@ export interface Palette {
   shadow: string;
 }
 
+/**
+ * "Notebook": warm paper, dark ink, one blue-pen accent. Flat colours — the
+ * gradient pairs are deliberately the same colour at both ends.
+ */
 const light: Palette = {
-  background: '#FBF9FF',
+  background: '#FAF7F0',
   surface: '#FFFFFF',
-  surfaceAlt: '#F4F1FC',
-  surfaceSunken: '#EEE9F8',
-  border: '#E7E1F4',
-  borderStrong: '#D5CCEA',
+  surfaceAlt: '#F3EEE3',
+  surfaceSunken: '#ECE6D8',
+  border: '#E6DFD0',
+  borderStrong: '#D3C9B4',
 
-  text: '#17132A',
-  textMuted: '#544D6B',
-  textFaint: '#7C7597',
+  text: '#1F1D1A',
+  textMuted: '#57524A',
+  textFaint: '#716B5F',
   onAccent: '#FFFFFF',
 
-  primary: '#5B4BE0',
-  primaryDeep: '#3B2CB0',
-  primarySoft: '#ECE8FF',
-  aqua: '#0E9E92',
-  aquaSoft: '#DFF4F1',
+  primary: '#2F5BD3',
+  primaryDeep: '#1F43A8',
+  primarySoft: '#E6EDFC',
+  aqua: '#1F8A70',
+  aquaSoft: '#DDF1EA',
 
-  bandLowText: '#0F7A6E',
-  bandLowFill: '#17B8A6',
-  bandLowSoft: '#DEF4F0',
-  bandElevatedText: '#8F6410',
-  bandElevatedFill: '#EFA93B',
-  bandElevatedSoft: '#FBEFD9',
-  bandHighText: '#AE5039',
-  bandHighFill: '#E9805F',
-  bandHighSoft: '#FBE7DF',
+  bandLowText: '#1D7A55',
+  bandLowFill: '#3DAA78',
+  bandLowSoft: '#E1F3E9',
+  bandElevatedText: '#8A5B00',
+  bandElevatedFill: '#F0A92E',
+  bandElevatedSoft: '#FCEFD3',
+  bandHighText: '#B34A2E',
+  bandHighFill: '#EC7A55',
+  bandHighSoft: '#FCE5DC',
 
-  positive: '#0F7A6E',
-  destructive: '#B4533C',
-  destructiveSoft: '#FAE6E0',
+  positive: '#1D7A55',
+  destructive: '#B23A2A',
+  destructiveSoft: '#FBE3DE',
 
-  aurora: ['#DCD2FF', '#CFEDE8'],
-  heat: ['#F1EDFA', '#D9F0EA', '#AFE3D4', '#F3DCA9', '#EFB587', '#E08C6C'],
+  aurora: ['#FAF7F0', '#FAF7F0'],
+  heat: ['#F1ECE1', '#DCEFE4', '#B5E0C8', '#F5DDA6', '#F1B38E', '#E28A6A'],
 
   gradients: {
-    primary: { from: '#6B57F0', to: '#4B3BC8' },
-    hero: { from: '#5B4BE0', to: '#1E9E97' },
-    low: { from: '#3ECFB8', to: '#0F9C8C' },
-    elevated: { from: '#F5BF5C', to: '#DC9520' },
-    high: { from: '#F2977A', to: '#D96A49' },
-    trend: { from: '#6B57F0', to: '#1E9E97' },
+    primary: { from: '#2F5BD3', to: '#2F5BD3' },
+    hero: { from: '#2F5BD3', to: '#2F5BD3' },
+    low: { from: '#3DAA78', to: '#3DAA78' },
+    elevated: { from: '#F0A92E', to: '#F0A92E' },
+    high: { from: '#EC7A55', to: '#EC7A55' },
+    trend: { from: '#2F5BD3', to: '#2F5BD3' },
   },
 
-  shadow: '#2A1F52',
+  shadow: '#3B2F1E',
 };
 
 const dark: Palette = {
@@ -249,8 +252,8 @@ export function bandStyle(band: RiskBand, palette: Palette): BandStyle {
         soft: palette.bandHighSoft,
         gradient: palette.gradients.high,
         blurb:
-          'Your last two weeks resemble the stretches that came before flares in the ' +
-          'training data.',
+          'Several of the rules are adding points at once, which is when flares are ' +
+          'most likely.',
       };
     case 'elevated':
       return {

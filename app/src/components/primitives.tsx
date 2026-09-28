@@ -39,7 +39,7 @@ export function Screen({
   children,
   edges = ['top'],
   scroll = true,
-  aurora = true,
+  aurora = false,
   contentStyle,
 }: {
   children: React.ReactNode;

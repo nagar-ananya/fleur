@@ -603,7 +603,7 @@ function CheckInCard({
           <View style={{ flex: 1 }}>
             <Txt variant="heading">Log today's check-in</Txt>
             <Txt variant="caption" tone="faint" style={{ marginTop: 1 }}>
-              5 quick steps · most of it filled in for you
+              9 quick questions · about 30 seconds
             </Txt>
           </View>
           <ChevronRight size={18} color={palette.primary} />

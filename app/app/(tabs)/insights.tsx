@@ -1,247 +1,149 @@
 /**
- * Insights — the trigger profile (REQUIREMENTS §11.4, FR-5.x).
+ * Insights — the 12 rules over time (REQUIREMENTS §11.4, FR-5.x).
  *
- * Two charts: what has actually been driving this person's score (averaged
- * over their own logged days), and what the rulebook watches in general. The
- * §11.4 preamble is required verbatim, and §13.4 forbids ever calling anything
- * "your #1 trigger".
+ * The score page answers "why is today's score what it is"; this screen
+ * answers "which rules usually add the most for me". Same 12 rules, same
+ * numbers (`ruleNumber`), same cards, but each shows the average points it
+ * added per day over the last 30 scored days, biggest first. Tapping one
+ * opens the same `/factor-detail` page as the score breakdown.
  *
- * v2 redesign additions: tapping a bar now opens the dedicated `/factor-detail`
- * screen (was an in-page bottom sheet); a static lag-reference table; and a
- * real elimination test (`useEliminationTest`) rather than a decorative card.
+ * §11.4's preamble is kept verbatim above the list, and §13.4 rules out
+ * calling anything "your #1 trigger" — the highlight says "adding the most
+ * lately" instead. The elimination test is not shown here for now (its hook,
+ * `useEliminationTest`, is untouched).
  */
 
 import { useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
-import { DivergingBars, type FactorBar } from '../../src/components/charts';
-import { FlaskIcon, InfoIcon, SparkIcon } from '../../src/components/icons';
+import { ChevronRight } from '../../src/components/icons';
 import { PressableScale, Reveal } from '../../src/components/motion';
-import {
-  Button,
-  Card,
-  IconBadge,
-  Kicker,
-  Screen,
-  ShortDisclaimer,
-  StatTile,
-  Txt,
-} from '../../src/components/primitives';
-import { INSIGHTS_PREAMBLE, INSIGHTS_SUBTITLE } from '../../src/constants/copy';
-import { ELIMINATION_CANDIDATES, useEliminationTest } from '../../src/hooks/useEliminationTest';
-import { rulebook, useApp } from '../../src/hooks/appState';
-import { buildDailyFrame } from '../../src/logic/frame';
-import { ruleAverages, scoredDayCount } from '../../src/logic/personal';
+import { Card, Kicker, Screen, ShortDisclaimer, Txt } from '../../src/components/primitives';
+import { INSIGHTS_PREAMBLE } from '../../src/constants/copy';
 import { loadFeatureInputRows } from '../../src/db/queries';
-import { todayLocal } from '../../src/utils/dates';
+import { rulebook, useApp } from '../../src/hooks/appState';
 import { useTheme } from '../../src/hooks/useTheme';
-import { spacing } from '../../src/theme';
+import { buildDailyFrame, MIN_HISTORY_DAYS } from '../../src/logic/frame';
+import { ruleAverages, scoredDayCount } from '../../src/logic/personal';
+import { ruleNumber } from '../../src/logic/rulebook';
+import { radius, spacing } from '../../src/theme';
+import { todayLocal } from '../../src/utils/dates';
 
-const TOP_N = 8; // FR-5.1
+/** How many recent days to average over. */
+const WINDOW_DAYS = 30;
 
-const LAG_REFERENCE: readonly { name: string; days: string }[] = [
-  { name: 'Cold snap / humidity drop', days: '1–3 days' },
-  { name: 'Sleep deprivation', days: '3–7 days' },
-  { name: 'Psychological stress', days: '7–14 days' },
-  { name: 'Skin injury (Koebner)', days: '10–14 days' },
-  { name: 'Streptococcal sore throat', days: '14–21 days' },
-];
+interface Row {
+  id: string;
+  label: string;
+  /** Average points added per day, one decimal. */
+  average: number;
+}
 
 export default function InsightsScreen(): React.ReactElement {
   const { palette } = useTheme();
   const router = useRouter();
   const { db, risk } = useApp();
-  const [personal, setPersonal] = useState<{ bars: FactorBar[]; days: number }>({
-    bars: [],
-    days: 0,
-  });
+  const [rows, setRows] = useState<Row[]>([]);
+  const [days, setDays] = useState(0);
 
-  // Averaged over the person's own logged days, not over simulated patients.
   useEffect(() => {
     if (!db) return;
-    void loadFeatureInputRows(db, todayLocal(), 120).then((rows) => {
-      const frame = buildDailyFrame(rows);
-      setPersonal({
-        bars: ruleAverages(frame, rulebook)
-          .slice(0, TOP_N)
-          .map((r) => ({
-            name: r.id,
-            label: r.label,
-            value: r.averagePoints,
-            direction: r.averagePoints >= 0 ? 'increases' : 'decreases',
-          })),
-        days: scoredDayCount(frame),
-      });
+    // Each scored day needs two weeks behind it, so load that much extra.
+    void loadFeatureInputRows(db, todayLocal(), WINDOW_DAYS + MIN_HISTORY_DAYS).then((input) => {
+      const frame = buildDailyFrame(input);
+      const byId = new Map(ruleAverages(frame, rulebook).map((r) => [r.id, r.averagePoints]));
+      setRows(
+        rulebook.rules
+          .map((rule) => ({
+            id: rule.id,
+            label: rule.label,
+            average: Math.round((byId.get(rule.id) ?? 0) * 10) / 10,
+          }))
+          .sort((a, b) => rank(a) - rank(b) || Math.abs(b.average) - Math.abs(a.average)),
+      );
+      setDays(scoredDayCount(frame));
     });
   }, [db, risk]);
 
-  // What Fleur watches and how heavily — authored, the same for everyone.
-  const rulebookBars = useMemo<FactorBar[]>(
-    () =>
-      [...rulebook.rules]
-        .sort((a, b) => Math.abs(b.points) - Math.abs(a.points))
-        .slice(0, TOP_N)
-        .map((r) => ({
-          name: r.id,
-          label: r.label,
-          value: r.points,
-          direction: r.points >= 0 ? 'increases' : 'decreases',
-        })),
-    [],
-  );
-
-  const bars = personal.bars.length > 0 ? personal.bars : rulebookBars;
+  const top = rows.find((r) => r.average > 0) ?? null;
+  const biggest = Math.max(1, ...rows.map((r) => Math.abs(r.average)));
+  const open = (row: Row): void =>
+    router.push({ pathname: '/factor-detail', params: { ruleId: row.id, label: row.label } });
 
   return (
     <Screen contentStyle={{ paddingBottom: 120 }}>
       <Reveal>
-        <Kicker>Trigger profile</Kicker>
+        <Kicker>Over time</Kicker>
         <Txt variant="display" style={{ marginTop: 4 }}>
-          What moves with flares
+          Your rules
         </Txt>
-        <Txt tone="muted" style={{ marginTop: spacing.sm }}>
-          {INSIGHTS_SUBTITLE}
+        <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 22 }}>
+          {`Points each rule added on an average day, over your last ${WINDOW_DAYS} days.`}
         </Txt>
       </Reveal>
 
-      {/* §11.4 required copy, verbatim. */}
-      <Reveal delay={70}>
-        <Card
-          tone="alt"
-          style={{
-            marginTop: spacing.lg,
-            borderColor: palette.primary,
-            borderWidth: 1,
-            flexDirection: 'row',
-            gap: spacing.md,
-          }}
-        >
-          <IconBadge background={palette.primarySoft} size={34}>
-            <InfoIcon size={18} color={palette.primary} />
-          </IconBadge>
-          <Txt variant="caption" style={{ flex: 1, lineHeight: 20 }}>
-            {INSIGHTS_PREAMBLE}
-          </Txt>
-        </Card>
-      </Reveal>
-
-      <Reveal delay={140}>
-        <Kicker style={{ marginTop: spacing.lg, marginBottom: spacing.sm }}>
-          {personal.bars.length > 0 ? 'What is driving your score' : 'What Fleur looks at'}
-        </Kicker>
-        <Card>
-          {personal.bars.length > 0 ? (
-            <DivergingBars
-              bars={personal.bars}
-              onSelect={(bar) =>
-                router.push({ pathname: '/factor-detail', params: { ruleId: bar.name, label: bar.label } })
-              }
-            />
-          ) : (
-            <DivergingBars
-              bars={rulebookBars}
-              onSelect={(bar) =>
-                router.push({ pathname: '/factor-detail', params: { ruleId: bar.name, label: bar.label } })
-              }
-            />
-          )}
-          <Txt variant="caption" tone="faint" style={{ marginTop: spacing.md, lineHeight: 19 }}>
-            {personal.bars.length > 0
-              ? `Average points each factor has added across your own ${personal.days} scored ${personal.days === 1 ? 'day' : 'days'}.`
-              : 'Points each rule can add, written from published research on trigger timing — not learned from your data or anyone else’s. Your own numbers appear here once you have two weeks logged.'}
-          </Txt>
-        </Card>
-      </Reveal>
-
-      {personal.bars.length > 0 ? (
-        <Reveal delay={165}>
-          <Kicker style={{ marginTop: spacing.xl, marginBottom: spacing.sm }}>
-            What Fleur looks at
-          </Kicker>
-          <Card>
-            <DivergingBars
-              bars={rulebookBars}
-              onSelect={(bar) =>
-                router.push({ pathname: '/factor-detail', params: { ruleId: bar.name, label: bar.label } })
-              }
-            />
-            <Txt variant="caption" tone="faint" style={{ marginTop: spacing.md, lineHeight: 19 }}>
-              Points each rule can add at most. Written from published research on how long each
-              trigger takes to show up — not learned from your data or anyone else’s.
+      {days === 0 ? (
+        <Reveal delay={60}>
+          <Card style={{ marginTop: spacing.xl }}>
+            <Txt variant="heading">Not enough days yet</Txt>
+            <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 22 }}>
+              {`Log ${MIN_HISTORY_DAYS} days of check-ins and your patterns will show up here.`}
             </Txt>
           </Card>
         </Reveal>
-      ) : null}
+      ) : (
+        <>
+          {top ? (
+            <Reveal delay={60}>
+              <PressableScale onPress={() => open(top)} accessibilityLabel={`Adding the most lately: ${top.label}`}>
+                <Card level={2} style={{ marginTop: spacing.xl, backgroundColor: palette.bandHighSoft }}>
+                  <Kicker style={{ color: palette.bandHighText }}>Adding the most lately</Kicker>
+                  <Txt variant="heading" style={{ marginTop: spacing.sm, lineHeight: 26 }}>
+                    {`Rule ${ruleNumber(top.id)} · ${top.label}`}
+                  </Txt>
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, marginTop: spacing.sm }}>
+                    <Txt variant="display" style={{ color: palette.bandHighText }}>
+                      {`+${top.average}`}
+                    </Txt>
+                    <Txt tone="muted" style={{ paddingBottom: 6 }}>
+                      points a day
+                    </Txt>
+                  </View>
+                </Card>
+              </PressableScale>
+            </Reveal>
+          ) : null}
 
-      <Reveal delay={190}>
-        <Kicker style={{ marginTop: spacing.xl, marginBottom: spacing.sm }}>
-          Typical lag · trigger to flare
-        </Kicker>
-        <Card>
-          {LAG_REFERENCE.map((row, index) => (
+          <Reveal delay={110}>
+            <Txt variant="caption" tone="faint" style={{ marginTop: spacing.xl, lineHeight: 19 }}>
+              {INSIGHTS_PREAMBLE}
+            </Txt>
             <View
-              key={row.name}
               style={{
                 flexDirection: 'row',
-                alignItems: 'center',
-                gap: spacing.md,
-                paddingVertical: spacing.sm,
-                borderTopWidth: index === 0 ? 0 : 1,
-                borderTopColor: palette.border,
+                justifyContent: 'space-between',
+                marginTop: spacing.lg,
+                marginBottom: spacing.sm,
               }}
             >
-              <View style={{ width: 2, height: 16, borderRadius: 1, backgroundColor: palette.primary }} />
-              <Txt style={{ flex: 1 }}>{row.name}</Txt>
-              <Txt variant="caption" tone="accent">
-                {row.days}
-              </Txt>
+              <Kicker>{`All ${rulebook.rules.length} rules`}</Kicker>
+              <Kicker>Per day</Kicker>
             </View>
-          ))}
-          <Txt variant="caption" tone="faint" style={{ marginTop: spacing.md, lineHeight: 18 }}>
-            Fleur looks back 14 days, so the 14–21 day streptococcal window is only partly
-            covered — a documented limitation.
-          </Txt>
-        </Card>
-      </Reveal>
+            <View style={{ gap: spacing.sm }}>
+              {rows.map((row) => (
+                <RuleAverageRow key={row.id} row={row} biggest={biggest} onPress={() => open(row)} />
+              ))}
+            </View>
+            <Txt variant="caption" tone="faint" style={{ textAlign: 'center', marginTop: spacing.lg }}>
+              {`Based on ${days} scored ${days === 1 ? 'day' : 'days'}. Tap a rule to see its chart.`}
+            </Txt>
+          </Reveal>
+        </>
+      )}
 
-      <EliminationTestCard bars={bars} />
-
-      <Reveal delay={280}>
-        <Card style={{ marginTop: spacing.lg }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-            <IconBadge background={palette.aquaSoft} size={34}>
-              <SparkIcon size={18} color={palette.aqua} />
-            </IconBadge>
-            <Txt variant="heading">How well it does</Txt>
-          </View>
-
-          <View style={{ flexDirection: 'row', marginTop: spacing.lg, gap: spacing.sm }}>
-            <StatTile
-              value={`${Math.round(rulebook.results.flare_rate_when_high * 100)}%`}
-              label="Flare followed, top band"
-              accent={palette.primary}
-            />
-            <StatTile
-              value={`${Math.round(rulebook.results.flare_rate_when_low * 100)}%`}
-              label="Flare followed, low band"
-              accent={palette.textMuted}
-            />
-            <StatTile
-              value={`${rulebook.rules.length}`}
-              label="Rules"
-              accent={palette.aqua}
-            />
-          </View>
-
-          <Txt variant="caption" tone="faint" style={{ marginTop: spacing.lg, lineHeight: 19 }}>
-            Version {rulebook.rulebook_version} · {rulebook.rules.length}-rule points system ·{' '}
-            {rulebook.horizon_hours}-hour horizon. Tested on{' '}
-            {rulebook.results.tested_on_days.toLocaleString()} days from simulated patients held
-            back from the design, so these describe the test set — not your own history — and
-            nothing here has been clinically validated.
-          </Txt>
-        </Card>
+      <Reveal delay={160}>
+        <TestedCard />
       </Reveal>
 
       <ShortDisclaimer />
@@ -249,117 +151,114 @@ export default function InsightsScreen(): React.ReactElement {
   );
 }
 
-/**
- * Genuinely functional: picks a candidate from the current top drivers
- * (never an unrelated variable), starts/tracks a real 14-day test, and
- * compares real logged severity across the two halves once it completes.
- */
-function EliminationTestCard({ bars }: { bars: readonly FactorBar[] }): React.ReactElement | null {
+/** Adds first, then takes off, then nothing. */
+function rank(row: Row): number {
+  if (row.average > 0) return 0;
+  if (row.average < 0) return 1;
+  return 2;
+}
+
+function RuleAverageRow({
+  row,
+  biggest,
+  onPress,
+}: {
+  row: Row;
+  biggest: number;
+  onPress: () => void;
+}): React.ReactElement {
   const { palette } = useTheme();
-  const { state, loaded, start, clear } = useEliminationTest();
-
-  // `bar.name` is a rule id; the elimination list is keyed by base variable.
-  const candidate = useMemo(() => {
-    for (const bar of bars) {
-      const variable = rulebook.rules.find((r) => r.id === bar.name)?.variable;
-      const match = variable ? ELIMINATION_CANDIDATES[variable] : undefined;
-      if (variable && match) return { variable, label: match };
-    }
-    return null;
-  }, [bars]);
-
-  if (!loaded) return null;
-  if (state.status === 'none' && !candidate) return null;
+  const active = row.average !== 0;
+  const raises = row.average > 0;
+  const tint = !active ? palette.textFaint : raises ? palette.bandHighText : palette.bandLowText;
+  const fill = raises ? palette.bandHighFill : palette.bandLowFill;
+  const value = !active ? '0' : raises ? `+${row.average}` : `−${-row.average}`;
+  const width = `${Math.max(3, (Math.abs(row.average) / biggest) * 100)}%` as const;
 
   return (
-    <Reveal delay={230}>
-      <Card
-        style={{
-          marginTop: spacing.lg,
-          borderColor: palette.primary,
-          borderWidth: 1,
-          backgroundColor: palette.primarySoft,
-        }}
-      >
+    <PressableScale
+      onPress={onPress}
+      accessibilityLabel={`Rule ${ruleNumber(row.id)}: ${row.label}, ${value} points a day`}
+      scaleTo={0.98}
+    >
+      <Card style={{ opacity: active ? 1 : 0.6 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-          <IconBadge background={palette.surface} size={34}>
-            <FlaskIcon size={17} color={palette.primary} />
-          </IconBadge>
-          <Kicker tone="accent">Elimination test</Kicker>
+          <View
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 15,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: palette.surfaceAlt,
+            }}
+          >
+            <Txt variant="label" tone="muted">
+              {ruleNumber(row.id)}
+            </Txt>
+          </View>
+          <Txt style={{ flex: 1, lineHeight: 21 }}>{row.label}</Txt>
+          <Txt variant="heading" style={{ color: tint, minWidth: 48, textAlign: 'right' }}>
+            {value}
+          </Txt>
+          <ChevronRight size={14} color={palette.textFaint} />
         </View>
-
-        {state.status === 'none' && candidate ? (
-          <>
-            <Txt variant="heading" style={{ marginTop: spacing.md }}>
-              {`Test ${candidate.label.toLowerCase()} for two weeks`}
-            </Txt>
-            <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 20 }}>
-              One week logging as usual, one week without. Fleur compares your own average
-              severity across both — not a controlled trial, but the most direct thing you can
-              do with your own data.
-            </Txt>
-            <Button
-              label="Start the test"
-              onPress={() => start(candidate.variable, candidate.label)}
-              style={{ marginTop: spacing.lg }}
-            />
-          </>
-        ) : null}
-
-        {state.status === 'running' ? (
-          <>
-            <Txt variant="heading" style={{ marginTop: spacing.md }}>
-              {`Testing ${state.label.toLowerCase()} · day ${state.day} of 14`}
-            </Txt>
-            <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 20 }}>
-              {state.phase === 'usual'
-                ? `Week 1: log ${state.label.toLowerCase()} as usual in your daily check-in.`
-                : `Week 2: avoid ${state.label.toLowerCase()} entirely, and keep logging.`}
-            </Txt>
-            <View style={{ height: 4, borderRadius: 2, backgroundColor: palette.surface, marginTop: spacing.lg, overflow: 'hidden' }}>
-              <View style={{ height: 4, width: `${(state.day / 14) * 100}%`, backgroundColor: palette.primary }} />
-            </View>
-            <PressableScale onPress={clear} accessibilityLabel="Cancel test" style={{ marginTop: spacing.md, minHeight: 32 }}>
-              <Txt variant="caption" tone="faint">
-                Cancel test
-              </Txt>
-            </PressableScale>
-          </>
-        ) : null}
-
-        {state.status === 'complete' ? (
-          <>
-            <Txt variant="heading" style={{ marginTop: spacing.md }}>
-              {`${state.label} · result`}
-            </Txt>
-            {state.week1Mean !== null && state.week2Mean !== null ? (
-              <>
-                <View style={{ flexDirection: 'row', gap: spacing.xl, marginTop: spacing.md }}>
-                  <StatTile value={state.week1Mean.toFixed(1)} label="Week 1 · as usual" />
-                  <StatTile value={state.week2Mean.toFixed(1)} label="Week 2 · avoided" />
-                </View>
-                <Txt tone="muted" style={{ marginTop: spacing.md, lineHeight: 20 }}>
-                  {describeDelta(state.week1Mean, state.week2Mean, state.label)}
-                </Txt>
-              </>
-            ) : (
-              <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 20 }}>
-                Too few check-ins across the two weeks for a fair comparison.
-              </Txt>
-            )}
-            <Button label="Start a new test" variant="secondary" onPress={clear} style={{ marginTop: spacing.lg }} />
-          </>
+        {active ? (
+          <View
+            style={{
+              height: 10,
+              marginTop: spacing.md,
+              marginLeft: 30 + spacing.md,
+              borderRadius: radius.pill,
+              backgroundColor: palette.surfaceAlt,
+              overflow: 'hidden',
+            }}
+          >
+            <View style={{ width, height: 10, borderRadius: radius.pill, backgroundColor: fill }} />
+          </View>
         ) : null}
       </Card>
-    </Reveal>
+    </PressableScale>
   );
 }
 
-function describeDelta(week1: number, week2: number, label: string): string {
-  const delta = Math.round((week2 - week1) * 10) / 10;
-  if (Math.abs(delta) < 0.3) {
-    return `Barely any difference — average severity moved by ${Math.abs(delta).toFixed(1)}. This isn't a controlled comparison, so treat it as a data point, not an answer.`;
-  }
-  const direction = delta < 0 ? 'lower' : 'higher';
-  return `Average severity was ${Math.abs(delta).toFixed(1)} points ${direction} while avoiding ${label.toLowerCase()}. Two weeks with everything else unchanged is not proof, but it's worth noticing.`;
+/** The rulebook's own test results, stated as being about the test set. */
+function TestedCard(): React.ReactElement {
+  const { palette } = useTheme();
+  const { results } = rulebook;
+  const tile = (value: number, label: string, color: string): React.ReactElement => (
+    <View
+      style={{
+        flex: 1,
+        alignItems: 'center',
+        backgroundColor: palette.surfaceAlt,
+        borderRadius: radius.md,
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.sm,
+      }}
+    >
+      <Txt variant="display" style={{ color }}>
+        {`${Math.round(value * 100)}%`}
+      </Txt>
+      <Txt variant="caption" tone="muted" center style={{ marginTop: 2 }}>
+        {label}
+      </Txt>
+    </View>
+  );
+
+  return (
+    <Card style={{ marginTop: spacing.xl }}>
+      <Txt variant="heading">How we tested Fleur</Txt>
+      <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 22 }}>
+        {`We ran the ${rulebook.rules.length} rules on ${results.tested_on_days.toLocaleString()} days of simulated patients. How often did a flare follow?`}
+      </Txt>
+      <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg }}>
+        {tile(results.flare_rate_when_high, 'when Fleur said High', palette.bandHighText)}
+        {tile(results.flare_rate_when_low, 'when Fleur said Low', palette.bandLowText)}
+      </View>
+      <Txt variant="caption" tone="faint" style={{ marginTop: spacing.md, lineHeight: 19 }}>
+        Simulated data, not real patients, and not clinically tested.
+      </Txt>
+    </Card>
+  );
 }

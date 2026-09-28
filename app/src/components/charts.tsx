@@ -509,130 +509,133 @@ export function LagTimeline({
 }
 
 // --------------------------------------------------------------------------
-// History — activity grid
+// History — month calendar
 // --------------------------------------------------------------------------
 
-const WEEKDAY_LABELS = ['M', '', 'W', '', 'F', '', 'S'];
+const WEEKDAY_HEADERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+/** Heat colour for a 0-10 skin severity; unlogged days get the plain surface. */
+export function severityColor(severity: number | null, palette: Palette): string {
+  if (severity === null) return palette.surfaceAlt;
+  const index = Math.min(palette.heat.length - 1, Math.floor((severity / 10) * palette.heat.length));
+  return palette.heat[index];
+}
 
 /**
- * Severity grid, one column per week and one row per weekday.
- *
- * Aligning to real weekdays (rather than packing cells in reading order) means
- * a person can see that their bad days cluster at weekends.
+ * One month as a normal wall calendar (Sunday first), each day a big square
+ * coloured by skin severity with its date inside. Future days are faded and
+ * not tappable.
  */
-export function ActivityGrid({
-  days,
+export function MonthCalendar({
+  month,
+  severities,
+  today,
   onSelect,
 }: {
-  days: readonly { date: string; severity: number | null }[];
+  /** Any date in the month to show, 'YYYY-MM-DD'. */
+  month: string;
+  severities: ReadonlyMap<string, number | null>;
+  today: string;
   onSelect: (date: string) => void;
 }): React.ReactElement {
   const { palette } = useTheme();
-  const [width, setWidth] = React.useState(0);
+  const [y, m] = month.split('-').map(Number);
+  const leading = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
+  const length = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const prefix = `${y}-${String(m).padStart(2, '0')}-`;
 
-  const gap = 3.5;
-  const labelWidth = 16;
-  const rows = 7;
-
-  const cells = useMemo(() => {
-    return days.map((day) => {
-      const [y, m, d] = day.date.split('-').map(Number);
-      // Monday-first row index.
-      const weekday = (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;
-      return { ...day, weekday };
-    });
-  }, [days]);
-
-  const columns = useMemo(() => {
-    if (cells.length === 0) return 0;
-    let column = 0;
-    let previous = cells[0].weekday;
-    for (let i = 1; i < cells.length; i += 1) {
-      if (cells[i].weekday <= previous) column += 1;
-      previous = cells[i].weekday;
-    }
-    return column + 1;
-  }, [cells]);
-
-  const cell =
-    width > 0 && columns > 0
-      ? Math.max((width - labelWidth - gap * (columns - 1)) / columns, 4)
-      : 0;
-  const height = rows * (cell + gap);
-
-  const colorFor = (severity: number | null): string => {
-    if (severity === null) return palette.surfaceAlt;
-    const index = Math.min(
-      palette.heat.length - 1,
-      Math.floor((severity / 10) * palette.heat.length),
-    );
-    return palette.heat[index];
-  };
-
-  let column = 0;
-  let previousWeekday = cells.length ? cells[0].weekday : 0;
+  const cells: (string | null)[] = [
+    ...Array.from({ length: leading }, () => null),
+    ...Array.from({ length }, (_, i) => `${prefix}${String(i + 1).padStart(2, '0')}`),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+  const weeks = Array.from({ length: cells.length / 7 }, (_, w) => cells.slice(w * 7, w * 7 + 7));
 
   return (
-    <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
-      {width > 0 && cell > 0 ? (
-        <Svg width={width} height={height}>
-          {WEEKDAY_LABELS.map((label, row) =>
-            label ? (
-              <Rect
-                key={`l${row}`}
-                x={0}
-                y={row * (cell + gap) + cell / 2 - 1}
-                width={7}
-                height={2}
-                rx={1}
-                fill={palette.textFaint}
-                opacity={0.5}
-              />
-            ) : null,
-          )}
-          {cells.map((item, index) => {
-            if (index > 0 && item.weekday <= previousWeekday) column += 1;
-            previousWeekday = item.weekday;
+    <View style={{ gap: 6 }}>
+      <View style={{ flexDirection: 'row', gap: 6 }}>
+        {WEEKDAY_HEADERS.map((label, i) => (
+          <Txt key={i} variant="caption" tone="faint" center style={{ flex: 1 }}>
+            {label}
+          </Txt>
+        ))}
+      </View>
+      {weeks.map((week, w) => (
+        <View key={w} style={{ flexDirection: 'row', gap: 6 }}>
+          {week.map((date, i) => {
+            if (!date) return <View key={i} style={{ flex: 1, aspectRatio: 1 }} />;
+            const future = date > today;
+            const severity = severities.get(date) ?? null;
+            const isToday = date === today;
             return (
-              <Rect
-                key={item.date}
-                x={labelWidth + column * (cell + gap)}
-                y={item.weekday * (cell + gap)}
-                width={cell}
-                height={cell}
-                rx={Math.min(4, cell / 3)}
-                fill={colorFor(item.severity)}
-                onPress={() => onSelect(item.date)}
-              />
+              <PressableScale
+                key={date}
+                onPress={() => onSelect(date)}
+                disabled={future}
+                accessibilityLabel={`${formatShort(date)}, ${
+                  severity === null ? 'nothing logged' : `skin ${severity} of 10`
+                }`}
+                scaleTo={0.92}
+                style={{
+                  flex: 1,
+                  aspectRatio: 1,
+                  borderRadius: radius.sm,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: future ? 'transparent' : severityColor(severity, palette),
+                  borderWidth: isToday ? 2 : 0,
+                  borderColor: palette.primary,
+                  opacity: future ? 0.35 : 1,
+                }}
+              >
+                <Txt
+                  variant="label"
+                  style={{ color: severity === null ? palette.textFaint : palette.text }}
+                >
+                  {Number(date.slice(8))}
+                </Txt>
+              </PressableScale>
             );
           })}
-        </Svg>
-      ) : null}
+        </View>
+      ))}
     </View>
   );
 }
 
-export function HeatLegend({ style }: { style?: StyleProp<ViewStyle> }): React.ReactElement {
+/** Colour key for the calendar: 0 to 10, plus "not logged". */
+export function SeverityLegend({ style }: { style?: StyleProp<ViewStyle> }): React.ReactElement {
   const { palette } = useTheme();
   return (
-    <View
-      style={[{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, style]}
-      accessibilityLabel="Scale from clear skin to most severe"
-    >
-      <Txt variant="caption" tone="faint">
-        Clear
-      </Txt>
-      <View style={{ flexDirection: 'row', gap: 3 }}>
-        {palette.heat.map((color) => (
-          <View
-            key={color}
-            style={{ width: 20, height: 9, borderRadius: 3, backgroundColor: color }}
-          />
-        ))}
+    <View style={[{ gap: spacing.sm }, style]} accessibilityLabel="Colour scale from clear skin to most severe">
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+        <Txt variant="caption" tone="muted">
+          0 Clear
+        </Txt>
+        <View style={{ flex: 1, flexDirection: 'row', gap: 3 }}>
+          {palette.heat.map((color) => (
+            <View key={color} style={{ flex: 1, height: 14, borderRadius: 4, backgroundColor: color }} />
+          ))}
+        </View>
+        <Txt variant="caption" tone="muted">
+          10 Severe
+        </Txt>
       </View>
-      <Txt variant="caption" tone="faint">
-        Severe
-      </Txt>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+        <View
+          style={{
+            width: 14,
+            height: 14,
+            borderRadius: 4,
+            backgroundColor: palette.surfaceAlt,
+            borderWidth: 1,
+            borderColor: palette.border,
+          }}
+        />
+        <Txt variant="caption" tone="muted">
+          Not logged
+        </Txt>
+      </View>
     </View>
   );
 }
