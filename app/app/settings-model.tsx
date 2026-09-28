@@ -29,7 +29,7 @@ export default function SettingsModelScreen(): React.ReactElement {
   ];
 
   const bandRates = [
-    { k: 'Said "higher than usual"', v: results.flare_rate_when_high },
+    { k: 'Said "high"', v: results.flare_rate_when_high },
     { k: 'Said "low"', v: results.flare_rate_when_low },
   ];
 

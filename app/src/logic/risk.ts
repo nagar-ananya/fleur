@@ -40,6 +40,8 @@ export type RiskState =
 
 export interface DayRules {
   readonly date: string;
+  /** That day's score, worked out the same way as today's. */
+  readonly score: number;
   readonly rules: readonly RuleScore[];
 }
 
@@ -60,7 +62,8 @@ export function deriveRiskState(rows: readonly FrameInputRow[], book: Rulebook):
   const first = Math.max(0, index - RECENT_WINDOW + 1);
   const history: DayRules[] = [];
   for (let i = first; i <= index; i += 1) {
-    history.push({ date: frame.dates[i], rules: scoreDay(frame, i, book).rules });
+    const day = scoreDay(frame, i, book);
+    history.push({ date: frame.dates[i], score: day.score, rules: day.rules });
   }
   return {
     status: 'ready',

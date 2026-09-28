@@ -62,6 +62,7 @@ export function TrendChart({
   gradient,
   showDots = true,
   interactive = false,
+  describe = (value: number) => `${value} · ${severityWord(value)}`,
 }: {
   points: readonly TrendPoint[];
   height?: number;
@@ -70,6 +71,8 @@ export function TrendChart({
   showDots?: boolean;
   /** Touch or drag to read individual days; the reading persists after release. */
   interactive?: boolean;
+  /** How a value reads in the scrubber tooltip. Defaults to severity wording. */
+  describe?: (value: number) => string;
 }): React.ReactElement {
   const { palette } = useTheme();
   const [width, setWidth] = React.useState(0);
@@ -171,7 +174,7 @@ export function TrendChart({
       accessibilityLabel={
         active
           ? `${formatShort(active.date)}: ${
-              active.value === null ? 'no entry' : `severity ${active.value}, ${severityWord(active.value)}`
+              active.value === null ? 'no entry' : describe(active.value)
             }`
           : undefined
       }
@@ -266,7 +269,7 @@ export function TrendChart({
             {formatShort(active.date)}
           </Txt>
           <Txt variant="label" style={{ color: active.value === null ? palette.textFaint : palette.text }}>
-            {active.value === null ? 'No entry' : `${active.value} · ${severityWord(active.value)}`}
+            {active.value === null ? 'No entry' : describe(active.value)}
           </Txt>
         </View>
       ) : interactive ? (

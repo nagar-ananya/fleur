@@ -5,7 +5,7 @@
  * palette carries a lot of weight. The rules that are not negotiable:
  *
  *   - No red and no alarm palette anywhere near risk. The top band is coral,
- *     labelled "Higher than usual", never "Warning".
+ *     labelled "High", never "Warning".
  *   - Light and dark are both first-class, not an afterthought toggle.
  *   - Colour never carries meaning alone; every band pairs with a text label.
  *   - Touch targets are at least 44pt.
@@ -243,7 +243,7 @@ export function bandStyle(band: RiskBand, palette: Palette): BandStyle {
   switch (band) {
     case 'high':
       return {
-        label: 'Higher than usual',
+        label: 'High',
         text: palette.bandHighText,
         fill: palette.bandHighFill,
         soft: palette.bandHighSoft,

@@ -515,3 +515,93 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
+
+/** Two big answer buttons for a yes/no question. */
+export function YesNo({
+  value,
+  onChange,
+}: {
+  value: boolean;
+  onChange: (next: boolean) => void;
+}): React.ReactElement {
+  const { palette } = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', gap: spacing.md }}>
+      {([true, false] as const).map((option) => {
+        const selected = value === option;
+        return (
+          <PressableScale
+            key={String(option)}
+            onPress={() => onChange(option)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected }}
+            accessibilityLabel={option ? 'Yes' : 'No'}
+            style={{
+              flex: 1,
+              height: 96,
+              borderRadius: radius.lg,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 2,
+              borderColor: selected ? palette.primary : palette.border,
+              backgroundColor: selected ? palette.primarySoft : palette.surfaceAlt,
+            }}
+          >
+            <Txt variant="heading" style={{ color: selected ? palette.primary : palette.text }}>
+              {option ? 'Yes' : 'No'}
+            </Txt>
+          </PressableScale>
+        );
+      })}
+    </View>
+  );
+}
+
+/** A big number with − and + either side, for counts like hours or drinks. */
+export function NumberStepper({
+  value,
+  onChange,
+  unit,
+  step = 1,
+  min = 0,
+  max,
+}: {
+  value: number | null;
+  onChange: (next: number) => void;
+  unit: string;
+  step?: number;
+  min?: number;
+  max: number;
+}): React.ReactElement {
+  const { palette } = useTheme();
+  const current = value ?? min;
+  const set = (next: number): void => onChange(Math.min(max, Math.max(min, next)));
+  const button = (label: string, delta: number, disabled: boolean): React.ReactElement => (
+    <PressableScale
+      onPress={() => set(current + delta)}
+      disabled={disabled}
+      accessibilityLabel={delta > 0 ? `More ${unit}` : `Fewer ${unit}`}
+      style={{
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: palette.surfaceAlt,
+        opacity: disabled ? 0.4 : 1,
+      }}
+    >
+      <Txt variant="title">{label}</Txt>
+    </PressableScale>
+  );
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      {button('−', -step, value !== null && current <= min)}
+      <View style={{ alignItems: 'center' }}>
+        <Txt variant="hero">{value === null ? '—' : `${current}`}</Txt>
+        <Txt tone="muted">{unit}</Txt>
+      </View>
+      {button('+', step, current >= max)}
+    </View>
+  );
+}

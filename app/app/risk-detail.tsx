@@ -2,7 +2,8 @@
  * Risk detail — "How your score adds up" (REQUIREMENTS §11.1 `/risk-detail`).
  *
  * Kept deliberately short: the score, where it sits on the band scale, and
- * all of the rulebook's rules as a numbered list with the whole points each
+ * all of the rulebook's rules as a numbered list (fixed rulebook order, the
+ * same numbers the check-in uses) with the whole points each
  * one added today. The rounded points add up to the total printed under
  * them (`wholeParts`), so the list can be checked by hand. Tapping a rule
  * opens its two-week chart on `/factor-detail`.
@@ -51,9 +52,12 @@ export default function RiskDetailScreen(): React.ReactElement {
   const present = scored.filter((r) => r !== null);
   const parts = wholeParts(present.map((r) => r.points));
   const partById = new Map(present.map((r, i) => [r.id, parts[i]]));
-  const rows: Row[] = rulebook.rules
-    .map((rule) => ({ id: rule.id, label: rule.label, points: partById.get(rule.id) ?? null }))
-    .sort((a, b) => rank(a) - rank(b) || (b.points ?? 0) - (a.points ?? 0));
+  // Fixed rulebook order, so "Rule 3" here is "Rule 3" in the check-in too.
+  const rows: Row[] = rulebook.rules.map((rule) => ({
+    id: rule.id,
+    label: rule.label,
+    points: partById.get(rule.id) ?? null,
+  }));
   const total = parts.reduce((t, v) => t + v, 0);
 
   const { elevated, high } = rulebook.bands;
@@ -159,13 +163,6 @@ export default function RiskDetailScreen(): React.ReactElement {
       <ShortDisclaimer />
     </Screen>
   );
-}
-
-/** Adds first, then takes-off, then zero, then no data. */
-function rank(row: Row): number {
-  if (row.points === null) return 3;
-  if (row.points === 0) return 2;
-  return row.points > 0 ? 0 : 1;
 }
 
 /** Low / elevated / higher strip with a marker where today's score sits. */

@@ -56,3 +56,8 @@ export interface Rulebook {
 }
 
 export const rulebook = rulebookJson as unknown as Rulebook;
+
+/** A rule's fixed number (1-based, rulebook order), shared by the check-in and the score breakdown. */
+export function ruleNumber(id: string, book: Rulebook = rulebook): number {
+  return book.rules.findIndex((r) => r.id === id) + 1;
+}

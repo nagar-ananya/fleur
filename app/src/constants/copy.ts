@@ -35,42 +35,6 @@ export const INSIGHTS_SUBTITLE = 'What has been adding most to your score';
  */
 export const RISK_HORIZON_KICKER = 'Flare risk score · next 3 days';
 
-/**
- * Says what the number is, and nothing more.
- *
- * Deliberately not a frequency. The score is a tally of how many risk factors
- * are stacking up today, which anyone can add up by hand from the rulebook — a
- * claim about how often a flare actually follows would need a measurement to
- * stay true, and would go stale the moment a rule changed.
- */
-export function scoreReading(score: number, driverCount: number): string {
-  if (driverCount === 0) {
-    return 'Nothing is adding much to your score today.';
-  }
-  const factors = driverCount === 1 ? 'factor' : 'factors';
-  return `${score} points, from ${driverCount} ${factors} adding up today.`;
-}
-
-/**
- * A plain comparison against the person's own history, never a fixed
- * reference. Both arguments are scores out of 100; returns `null` when there
- * isn't yet a meaningful "usual" to compare against.
- */
-export function usualComparisonReading(score: number, usual: number | null): string | null {
-  if (usual === null || usual < 1) return null;
-  const ratio = score / usual;
-  if (ratio >= 1.8) {
-    return `Roughly ${Math.round(ratio)}× your own average from past check-ins, which is why today stands out.`;
-  }
-  if (ratio >= 1.2) {
-    return 'Somewhat above your own average from past check-ins.';
-  }
-  if (ratio <= 0.6) {
-    return 'Well below your own average from past check-ins.';
-  }
-  return 'Close to your own average from past check-ins.';
-}
-
 export interface FactorExplanation {
   /** What the factor is, in plain language. */
   description: string;

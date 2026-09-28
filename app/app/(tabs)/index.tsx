@@ -12,9 +12,8 @@
  * per-day "chance it starts that day" for the next three days. The model
  * only ever produces one 72-hour aggregate probability (§8.1) — there is no
  * real per-day sub-score to show — so that row is left out rather than
- * invented. What *is* real and shown instead: today's probability against
- * the mean of your own past predictions ("usual"), computed from the
- * `prediction` log (§6.5) rather than a fixed number.
+ * invented. The last seven days of the same score are charted below it
+ * instead.
  */
 
 import * as Location from 'expo-location';
@@ -51,13 +50,10 @@ import {
   exportCsv,
   getEnvironmentDay,
   getLastEnvironmentFetch,
-  getRecentPredictions,
   listCheckIns,
 } from '../../src/db/queries';
 import {
   RISK_HORIZON_KICKER,
-  scoreReading,
-  usualComparisonReading,
 } from '../../src/constants/copy';
 import { useApp } from '../../src/hooks/appState';
 import { useTheme } from '../../src/hooks/useTheme';
@@ -83,12 +79,15 @@ export default function TodayScreen(): React.ReactElement {
     aiStatus,
     refreshAiOpinion,
   } = useApp();
-  const [trend, setTrend] = useState<{ date: string; value: number | null }[]>([]);
   const [ribbon, setRibbon] = useState<{ date: string; logged: boolean }[]>([]);
   const [conditions, setConditions] = useState<EnvironmentDay | null>(null);
-  const [usual, setUsual] = useState<number | null>(null);
   const [lastFetch, setLastFetch] = useState<string | null>(null);
   const today = todayLocal();
+  // The same scores as the card above, worked out for each of the last 7 days.
+  const trend =
+    risk.status === 'ready'
+      ? risk.history.slice(-7).map((day) => ({ date: day.date, value: day.score }))
+      : [];
 
   // Recompute whenever the screen regains focus — returning from a check-in
   // must show the updated number (FR-4.3).
@@ -102,24 +101,12 @@ export default function TodayScreen(): React.ReactElement {
     if (!db) return;
     const from = addDays(today, -13);
     void listCheckIns(db, from, today).then((rows) => {
-      const byDate = new Map(rows.map((r) => [r.date, r.severity]));
+      const logged = new Set(rows.map((r) => r.date));
       const window = dateRange(from, today);
-      setTrend(
-        window.slice(-7).map((date) => ({ date, value: byDate.get(date) ?? null })),
-      );
-      setRibbon(window.map((date) => ({ date, logged: byDate.has(date) })));
+      setRibbon(window.map((date) => ({ date, logged: logged.has(date) })));
     });
     void getEnvironmentDay(db, today).then(setConditions);
     void getLastEnvironmentFetch(db).then(setLastFetch);
-    // "Usual": the mean of your own past predictions, so the comparison on
-    // the ready card is drawn from real history, not a fixed reference.
-    void getRecentPredictions(db, 60).then((rows) => {
-      const past = rows.filter((r) => r.forDate !== today);
-      // Stored as a fraction in the existing column; the UI works in points.
-      setUsual(
-        past.length ? (past.reduce((t, r) => t + r.probability, 0) / past.length) * 100 : null,
-      );
-    });
   }, [db, today, risk]);
 
   const doEnvironmentRefresh = useCallback(
@@ -193,13 +180,13 @@ export default function TodayScreen(): React.ReactElement {
             <ExportIcon size={17} color={palette.textMuted} />
           </PressableScale>
         </View>
-        <Txt variant="display" style={{ marginTop: spacing.md }}>
+        <Txt variant="title" style={{ marginTop: spacing.sm }}>
           {greeting()}
         </Txt>
       </Reveal>
 
       <Reveal delay={70}>
-        <View style={{ marginTop: spacing.xl }}>
+        <View style={{ marginTop: spacing.lg }}>
           {risk.status === 'loading' ? <LoadingCard /> : null}
           {risk.status === 'collecting' ? (
             <CollectingCard
@@ -216,8 +203,6 @@ export default function TodayScreen(): React.ReactElement {
           {risk.status === 'ready' ? (
             <ReadyCard
               score={risk.score}
-              driverCount={risk.drivers.length}
-              usual={usual}
               band={risk.band}
               onOpen={() => router.push('/risk-detail')}
             />
@@ -254,16 +239,27 @@ export default function TodayScreen(): React.ReactElement {
         />
       </Reveal>
 
-      {trend.some((p) => p.value !== null) ? (
+      {trend.length > 1 ? (
         <Reveal delay={200}>
           <Card style={{ marginTop: spacing.md }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Txt variant="heading">Last 7 days</Txt>
+              <View>
+                <Txt variant="heading">Last 7 days</Txt>
+                <Txt variant="caption" tone="faint" style={{ marginTop: 2 }}>
+                  Your flare score each day
+                </Txt>
+              </View>
               <IconBadge background={palette.aquaSoft} size={32}>
                 <TrendUpIcon size={17} color={palette.aqua} />
               </IconBadge>
             </View>
-            <TrendChart points={trend} height={104} interactive />
+            <TrendChart
+              points={trend}
+              height={130}
+              max={100}
+              interactive
+              describe={(v) => `${v} points`}
+            />
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
               <Txt variant="caption" tone="faint">
                 7 days ago
@@ -295,22 +291,6 @@ export default function TodayScreen(): React.ReactElement {
         </Reveal>
       ) : null}
 
-      {risk.status === 'ready' ? (
-        <Reveal delay={310}>
-          <PressableScale onPress={() => router.push('/reset')} accessibilityLabel="Open Reset" scaleTo={0.99}>
-            <Card style={{ marginTop: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-              <IconBadge background={palette.primarySoft}>
-                <LeafIcon size={18} color={palette.primary} />
-              </IconBadge>
-              <Txt variant="label" style={{ flex: 1 }}>
-                Reset — 3 things for today
-              </Txt>
-              <ChevronRight size={17} color={palette.textFaint} />
-            </Card>
-          </PressableScale>
-        </Reveal>
-      ) : null}
-
       <ShortDisclaimer />
     </Screen>
   );
@@ -330,21 +310,16 @@ function LoadingCard(): React.ReactElement {
 
 function ReadyCard({
   score,
-  driverCount,
-  usual,
   band,
   onOpen,
 }: {
   score: number;
-  driverCount: number;
-  usual: number | null;
   band: 'low' | 'elevated' | 'high';
   onOpen: () => void;
 }): React.ReactElement {
   const { palette } = useTheme();
   const style = bandStyle(band, palette);
   const points = useCountUp(score);
-  const comparison = usualComparisonReading(score, usual);
 
   return (
     <PressableScale
@@ -353,43 +328,29 @@ function ReadyCard({
       accessibilityLabel={`Flare risk ${style.label}, ${score} points out of 100`}
       accessibilityHint="Opens the full breakdown"
     >
-      <Card level={2} style={{ paddingTop: spacing.xl }}>
+      <Card level={2}>
         <Kicker>{RISK_HORIZON_KICKER}</Kicker>
 
         {/* Points, not a percentage — the number is a tally, and writing it
             with a % sign would invite reading it as a probability. */}
-        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.md, marginTop: spacing.md, flexWrap: 'wrap' }}>
-          <Txt variant="hero" style={{ color: style.text }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm }}>
+          <Txt variant="hero" style={{ color: style.text, fontSize: 76, lineHeight: 84, letterSpacing: -2 }}>
             {points}
           </Txt>
-          <Txt tone="faint" style={{ paddingBottom: 6 }}>/ 100</Txt>
+          <Txt variant="heading" tone="faint">
+            / 100
+          </Txt>
+          <View style={{ flex: 1 }} />
           <Pill label={style.label} color={style.text} background={style.soft} />
         </View>
-
-        <Txt tone="muted" style={{ marginTop: spacing.md, lineHeight: 22, maxWidth: 320 }}>
-          {scoreReading(score, driverCount)}
-        </Txt>
-
-        {usual !== null ? (
-          <View style={{ marginTop: spacing.lg, gap: spacing.sm }}>
-            <UsualBar label="TODAY" value={score} fill={style.fill} accent />
-            <UsualBar label="USUAL" value={usual} fill={palette.textFaint} />
-          </View>
-        ) : null}
-
-        {comparison ? (
-          <Txt tone="muted" style={{ marginTop: spacing.md, lineHeight: 21 }}>
-            {comparison}
-          </Txt>
-        ) : null}
 
         <View
           style={{
             flexDirection: 'row',
             alignItems: 'center',
             gap: 4,
-            marginTop: spacing.lg,
-            paddingTop: spacing.lg,
+            marginTop: spacing.md,
+            paddingTop: spacing.md,
             borderTopWidth: 1,
             borderTopColor: palette.border,
           }}
@@ -505,34 +466,6 @@ function NoRiskYetPill({ label }: { label: string }): React.ReactElement {
       <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: palette.primary }} />
       <Txt variant="micro" tone="accent">
         {label}
-      </Txt>
-    </View>
-  );
-}
-
-function UsualBar({
-  label,
-  value,
-  fill,
-  accent = false,
-}: {
-  label: string;
-  value: number;
-  fill: string;
-  accent?: boolean;
-}): React.ReactElement {
-  const { palette } = useTheme();
-  const points = Math.min(100, Math.round(value));
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-      <Txt variant="micro" tone={accent ? 'accent' : 'faint'} style={{ width: 46 }}>
-        {label}
-      </Txt>
-      <View style={{ flex: 1, height: 6, borderRadius: 3, backgroundColor: palette.surfaceAlt, overflow: 'hidden' }}>
-        <View style={{ height: 6, width: `${points}%`, borderRadius: 3, backgroundColor: fill }} />
-      </View>
-      <Txt variant="label" style={{ width: 36, textAlign: 'right' }}>
-        {points}
       </Txt>
     </View>
   );
