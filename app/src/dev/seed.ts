@@ -1,9 +1,10 @@
 /**
- * Development-only data seeding.
+ * Developer-mode data seeding.
  *
- * NOT A PRODUCT FEATURE. §2 keeps the app's surface small, and this adds
- * nothing a user would ever see: `DEV_TOOLS_ENABLED` is `__DEV__`, so the
- * Settings entry that calls this does not exist in a release build.
+ * NOT A PRODUCT FEATURE. The Settings entry that calls this is hidden unless
+ * developer mode is on: always in a development build (`DEV_TOOLS_ENABLED`),
+ * and in a release build only after tapping the Settings footer
+ * `DEV_MODE_TAPS` times, so a demo phone can be filled without a computer.
  *
  * It exists because of a real testing problem. FR-4.2 refuses to show a risk
  * value until 14 distinct days are logged, and FR-2.4 caps back-filling at 7
@@ -24,8 +25,14 @@ import { saveCheckIn } from '../db/queries';
 import { emptyCheckIn, type CheckIn } from '../types/models';
 import { addDays, todayLocal } from '../utils/dates';
 
-/** Compiled out of release builds. */
+/** Developer mode's starting state: on in development builds, off in release. */
 export const DEV_TOOLS_ENABLED: boolean = __DEV__;
+
+/** `meta` key remembering whether developer mode was switched on or off. */
+export const DEV_MODE_KEY = 'dev_mode';
+
+/** Taps on the Settings footer that toggle developer mode. */
+export const DEV_MODE_TAPS = 5;
 
 export const DEFAULT_SEED_DAYS = 30;
 

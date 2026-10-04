@@ -1,34 +1,37 @@
 /**
- * Reset → Breathwork session player.
- *
- * A modal, closed with an explicit X rather than a back arrow — this is the
- * one Reset screen the source design also treats as a focused, full-screen
- * player rather than a page in a stack.
- *
- * Only sessions with a real timed `pattern` (see `src/constants/reset.ts`)
- * get the animated ring; the rest get an honest "about this session" card
- * instead of a fabricated breathing pattern Fleur never authored.
+ * Reset → Breathing → one exercise. A full-screen player (closed with X):
+ * the breathing ring paces each breath, a countdown shows time left, and a
+ * single chime marks the end.
  */
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { useKeepAwake } from 'expo-keep-awake';
+import React, { useEffect } from 'react';
 import { View } from 'react-native';
 
-import { CloseIcon, PauseIcon, PlayIcon, WindIcon } from '../src/components/icons';
+import { CloseIcon } from '../src/components/icons';
 import { PressableScale, Reveal } from '../src/components/motion';
 import { BreathingRing } from '../src/components/reset-ui';
-import { Button, Card, IconBadge, Screen, Txt } from '../src/components/primitives';
-import { BREATH_SESSIONS } from '../src/constants/reset';
+import { Button, Screen, Txt } from '../src/components/primitives';
+import { BREATH_EXERCISES } from '../src/constants/reset';
+import { useAlarm } from '../src/hooks/useAlarm';
+import { formatClock, useCountdown } from '../src/hooks/useCountdown';
 import { useTheme } from '../src/hooks/useTheme';
 import { spacing } from '../src/theme';
 
 export default function BreathSessionScreen(): React.ReactElement {
+  useKeepAwake();
   const { palette } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
-  const session = BREATH_SESSIONS.find((s) => s.id === params.id) ?? BREATH_SESSIONS[0];
-  const [playing, setPlaying] = useState(true);
-  const hasPattern = session.pattern.length > 0;
+  const exercise = BREATH_EXERCISES.find((s) => s.id === params.id) ?? BREATH_EXERCISES[0];
+  const clock = useCountdown(exercise.minutes * 60);
+  const alarm = useAlarm();
+
+  useEffect(() => {
+    if (clock.done) alarm.ring(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clock.done]);
 
   return (
     <Screen aurora={false} contentStyle={{ paddingBottom: spacing.xl }}>
@@ -37,9 +40,9 @@ export default function BreathSessionScreen(): React.ReactElement {
           onPress={() => router.back()}
           accessibilityLabel="Close"
           style={{
-            width: 40,
-            height: 40,
-            borderRadius: 20,
+            width: 44,
+            height: 44,
+            borderRadius: 22,
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: palette.surfaceAlt,
@@ -48,66 +51,56 @@ export default function BreathSessionScreen(): React.ReactElement {
           <CloseIcon size={18} color={palette.textMuted} />
         </PressableScale>
         <View style={{ flex: 1 }}>
-          <Txt variant="heading">{session.title}</Txt>
-          <Txt variant="caption" tone="faint" style={{ marginTop: 2 }}>
-            {`Breathwork · ${session.meta}`}
+          <Txt variant="heading">{exercise.title}</Txt>
+          <Txt tone="muted" style={{ marginTop: 2 }}>
+            {exercise.meta}
           </Txt>
         </View>
       </View>
 
-      {hasPattern ? (
-        <Reveal delay={80}>
-          <View style={{ alignItems: 'center', marginTop: spacing.xxl }}>
-            <BreathingRing pattern={session.pattern} phaseLabels={session.phaseLabels} playing={playing} />
-          </View>
+      <Reveal delay={80}>
+        <View style={{ alignItems: 'center', marginTop: spacing.xxl }}>
+          {clock.done ? (
+            <View style={{ height: 260, alignItems: 'center', justifyContent: 'center' }}>
+              <Txt variant="display" style={{ color: palette.bandLowText }}>
+                Nice work
+              </Txt>
+              <Txt tone="muted" style={{ marginTop: spacing.sm }}>
+                {`${exercise.minutes} minutes done`}
+              </Txt>
+            </View>
+          ) : (
+            <BreathingRing pattern={exercise.pattern} phaseLabels={exercise.phaseLabels} playing={clock.running} />
+          )}
+        </View>
 
-          <PressableScale
-            onPress={() => setPlaying((p) => !p)}
-            accessibilityLabel={playing ? 'Pause session' : 'Resume session'}
-            style={{
-              marginTop: spacing.xxl,
-              minHeight: 56,
-              borderRadius: 999,
-              borderWidth: 1,
-              borderColor: palette.primary,
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexDirection: 'row',
-              gap: spacing.sm,
-            }}
+        {!clock.done ? (
+          <Txt
+            variant="title"
+            center
+            tone="muted"
+            style={{ marginTop: spacing.xl, fontVariant: ['tabular-nums'] }}
           >
-            {playing ? (
-              <PauseIcon size={18} color={palette.primary} />
-            ) : (
-              <PlayIcon size={18} color={palette.primary} />
-            )}
-            <Txt variant="label" tone="accent">
-              {playing ? 'Pause session' : 'Resume session'}
-            </Txt>
-          </PressableScale>
-        </Reveal>
-      ) : (
-        <Reveal delay={80}>
-          <Card level={2} style={{ marginTop: spacing.xxl, alignItems: 'center', paddingVertical: spacing.xxl }}>
-            <IconBadge background={palette.primarySoft} size={54}>
-              <WindIcon size={24} color={palette.primary} />
-            </IconBadge>
-            <Txt variant="heading" style={{ marginTop: spacing.lg }} center>
-              {session.title}
-            </Txt>
-            <Txt tone="muted" center style={{ marginTop: spacing.sm, lineHeight: 21 }}>
-              This one is guided by feel rather than a fixed count — settle in, breathe evenly,
-              and stop whenever it has done its job.
-            </Txt>
-          </Card>
-          <Button label="Done" variant="secondary" onPress={() => router.back()} style={{ marginTop: spacing.xl }} />
-        </Reveal>
-      )}
+            {`${formatClock(clock.secondsLeft)} left`}
+          </Txt>
+        ) : null}
 
-      <Txt variant="caption" tone="faint" style={{ marginTop: spacing.xxl, lineHeight: 19 }}>
-        Not logged to your check-in. Breathwork is not a treatment — it targets whichever factor
-        in your profile currently carries the most weight.
-      </Txt>
+        <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xl }}>
+          {clock.done ? (
+            <>
+              <Button label="Again" variant="secondary" onPress={clock.restart} style={{ flex: 1 }} />
+              <Button label="Finish" onPress={() => router.back()} style={{ flex: 1 }} />
+            </>
+          ) : (
+            <Button
+              label={clock.running ? 'Pause' : 'Resume'}
+              variant="secondary"
+              onPress={clock.running ? clock.pause : clock.resume}
+              style={{ flex: 1 }}
+            />
+          )}
+        </View>
+      </Reveal>
     </Screen>
   );
 }

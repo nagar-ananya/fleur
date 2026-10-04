@@ -1,5 +1,5 @@
 /**
- * Tab navigator (REQUIREMENTS §11.1): Today, Insights, History, Settings.
+ * Tab navigator (REQUIREMENTS §11.1): Today, Rules, History, Reset, Settings.
  *
  * The bar floats above the content with a soft rounded shell, and the active
  * tab's icon sits in a tinted pill. Labels stay visible on every tab — a
@@ -91,8 +91,8 @@ export default function TabsLayout(): React.ReactElement {
     >
       <Tabs.Screen name="index" options={{ title: 'Today', tabBarIcon: icon(TodayIcon) }} />
       <Tabs.Screen
-        name="insights"
-        options={{ title: 'Insights', tabBarIcon: icon(InsightsIcon) }}
+        name="rules"
+        options={{ title: 'Rules', tabBarIcon: icon(InsightsIcon) }}
       />
       <Tabs.Screen name="history" options={{ title: 'History', tabBarIcon: icon(HistoryIcon) }} />
       <Tabs.Screen name="reset" options={{ title: 'Reset', tabBarIcon: icon(LeafIcon) }} />

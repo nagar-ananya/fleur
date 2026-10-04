@@ -79,14 +79,11 @@ function Gate(): React.ReactElement {
         />
         <Stack.Screen name="reset-movement" options={{ title: 'Movement' }} />
         <Stack.Screen name="reset-recipe" options={{ title: 'Recipe' }} />
-        <Stack.Screen name="reset-sleep-routine" options={{ title: 'Wind-down' }} />
-        <Stack.Screen name="reset-skin-routine" options={{ title: "Today's routine" }} />
-        <Stack.Screen name="reset-journal" options={{ title: 'Journal' }} />
+        <Stack.Screen name="reset-skin-routine" options={{ title: "Today's skin routine" }} />
 
         {/* Settings sub-pages. */}
         <Stack.Screen name="settings-profile" options={{ title: 'Profile' }} />
-        <Stack.Screen name="settings-permissions" options={{ title: 'Permissions' }} />
-        <Stack.Screen name="settings-export" options={{ title: 'Export as CSV' }} />
+        <Stack.Screen name="settings-export" options={{ title: 'Export' }} />
         <Stack.Screen name="settings-ai" options={{ title: 'AI second opinion' }} />
         <Stack.Screen name="settings-model" options={{ title: 'Scoring & disclaimer' }} />
         <Stack.Screen name="settings-delete" options={{ title: 'Delete all data' }} />

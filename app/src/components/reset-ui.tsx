@@ -10,51 +10,9 @@ import Svg, { Circle } from 'react-native-svg';
 
 import { useTheme } from '../hooks/useTheme';
 import { radius, spacing } from '../theme';
-import { ChevronRight } from './icons';
+import { CheckIcon, ChevronRight } from './icons';
 import { PressableScale } from './motion';
 import { Card, Pill, Txt } from './primitives';
-
-export function SessionRow({
-  icon,
-  title,
-  meta,
-  tag,
-  onPress,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  meta: string;
-  tag?: string;
-  onPress: () => void;
-}): React.ReactElement {
-  const { palette } = useTheme();
-  return (
-    <PressableScale
-      onPress={onPress}
-      accessibilityLabel={title}
-      scaleTo={0.985}
-      style={{ marginBottom: spacing.sm }}
-    >
-      <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-        {icon}
-        <View style={{ flex: 1 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-            <Txt variant="label" numberOfLines={1} style={{ flexShrink: 1 }}>
-              {title}
-            </Txt>
-            {tag ? (
-              <Pill label={tag} color={palette.primary} background={palette.primarySoft} />
-            ) : null}
-          </View>
-          <Txt variant="caption" tone="faint" style={{ marginTop: 3 }} numberOfLines={1}>
-            {meta}
-          </Txt>
-        </View>
-        <ChevronRight size={16} color={palette.textFaint} />
-      </Card>
-    </PressableScale>
-  );
-}
 
 export function ChecklistRow({
   title,
@@ -63,7 +21,7 @@ export function ChecklistRow({
   onToggle,
 }: {
   title: string;
-  meta: string;
+  meta?: string;
   done: boolean;
   onToggle: () => void;
 }): React.ReactElement {
@@ -88,9 +46,9 @@ export function ChecklistRow({
       >
         <View
           style={{
-            width: 24,
-            height: 24,
-            borderRadius: 12,
+            width: 28,
+            height: 28,
+            borderRadius: 14,
             borderWidth: 2,
             borderColor: done ? palette.primary : palette.borderStrong,
             backgroundColor: done ? palette.primary : 'transparent',
@@ -98,15 +56,17 @@ export function ChecklistRow({
             justifyContent: 'center',
           }}
         >
-          {done ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: palette.onAccent }} /> : null}
+          {done ? <CheckIcon size={16} color={palette.onAccent} /> : null}
         </View>
         <View style={{ flex: 1 }}>
           <Txt variant="label" style={done ? { color: palette.textFaint, textDecorationLine: 'line-through' } : undefined}>
             {title}
           </Txt>
-          <Txt variant="caption" tone="faint" style={{ marginTop: 2 }}>
-            {meta}
-          </Txt>
+          {meta ? (
+            <Txt variant="caption" tone="faint" style={{ marginTop: 2 }}>
+              {meta}
+            </Txt>
+          ) : null}
         </View>
       </Card>
     </PressableScale>

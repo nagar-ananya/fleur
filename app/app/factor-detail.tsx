@@ -1,12 +1,10 @@
 /**
- * Factor detail — one rule, chart first. Reachable from the score breakdown
- * (`/risk-detail`), Insights' trigger list and a Reset session's "why this is
- * here" line.
+ * Factor detail — one rule, chart first. Reachable from the Rules tab.
  *
- * Shows today's points, a big line of the points this rule added each day
- * over the last two weeks (scored the same way as today, from
- * `risk.history`), and two short lines: what the rule looks at and why it is
- * in the rulebook.
+ * Shows today's points and the maximum side by side, a big line of the
+ * points this rule added each day over the last two weeks (scored the same
+ * way as today, from `risk.history`), how the rule works (`ruleHow`) and why
+ * it is in the rulebook.
  */
 
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -18,49 +16,12 @@ import { WindIcon } from '../src/components/icons';
 import { Reveal } from '../src/components/motion';
 import { Button, Card, Kicker, Screen, Txt } from '../src/components/primitives';
 import { explanationFor } from '../src/constants/copy';
-import { categoryForVariable, planItemFor } from '../src/constants/reset';
+import { categoryForVariable, categoryPath } from '../src/constants/reset';
+import { ruleHow, type RuleHow } from '../src/constants/rules';
 import { rulebook, useApp } from '../src/hooks/appState';
-import type { Rule } from '../src/logic/rulebook';
+import { wholePointsById } from '../src/logic/engine';
 import { useTheme } from '../src/hooks/useTheme';
-import { spacing } from '../src/theme';
-
-/** What each rule's column measures, in words a reader would use. */
-const MEASURES: Readonly<Record<string, string>> = {
-  severity_delta: 'how far your skin is above its two-week average',
-  stress: 'stress level',
-  sleep_hours: 'hours of sleep',
-  itch: 'itch level',
-  alcohol_units: 'drinks a day',
-  diet_processed: 'processed-food days',
-  pm2_5: 'air pollution (PM2.5)',
-  temp_delta_1d: 'temperature change (°C)',
-  uv_index_max: 'UV index',
-};
-
-/** "Average stress level, 7 to 14 days ago. At 2 → 0 points; at 8 → +15 points." */
-function whatItLooksAt(rule: Rule): string {
-  const { column, how, from = 0, to = 0 } = rule.look_at;
-  const window =
-    how === 'today' ? 'today' : from === 0 ? `over the last ${to + 1} days` : `${from} to ${to} days ago`;
-  const full = `${rule.points > 0 ? '+' : '−'}${Math.abs(rule.points)}`;
-
-  // Yes/no questions (unwell, sore throat, skin injury).
-  if (how === 'highest' && rule.low === 0 && rule.high === 1) {
-    return `Checks whether you logged it ${window}. No → 0 points. Yes → ${full} points.`;
-  }
-  const measure = MEASURES[column] ?? 'value';
-  const lead =
-    how === 'average'
-      ? `Average ${measure}`
-      : how === 'total'
-        ? `Number of ${measure}`
-        : how === 'highest'
-          ? `Highest ${measure}`
-          : how === 'lowest'
-            ? `Biggest ${measure}`
-            : `Your ${measure}`;
-  return `${lead} ${window}. At ${rule.low} → 0 points. At ${rule.high} → ${full} points.`;
-}
+import { radius, spacing } from '../src/theme';
 
 function firstSentence(text: string): string {
   return text.match(/^[^.]*\./)?.[0] ?? text;
@@ -74,7 +35,7 @@ export default function FactorDetailScreen(): React.ReactElement {
   const { palette } = useTheme();
   const router = useRouter();
   const { risk } = useApp();
-  const params = useLocalSearchParams<{ ruleId?: string; label?: string; points?: string }>();
+  const params = useLocalSearchParams<{ ruleId?: string; label?: string }>();
   const ruleId = params.ruleId ?? '';
 
   const rule = useMemo(() => rulebook.rules.find((r) => r.id === ruleId), [ruleId]);
@@ -87,9 +48,8 @@ export default function FactorDetailScreen(): React.ReactElement {
   const max = Math.abs(rule?.points ?? 0);
 
   const ready = risk.status === 'ready' ? risk : null;
-  const todayRule = ready?.rules.find((r) => r.id === ruleId);
-  // The list passes its rounded value so both screens show the same number.
-  const today = params.points !== undefined ? Number(params.points) : todayRule ? Math.round(todayRule.points) : null;
+  // Rounded exactly as the score table rounds it, so both show the same number.
+  const today = ready ? (wholePointsById(ready.rules, rulebook).get(ruleId) ?? null) : null;
 
   const history = useMemo(
     () =>
@@ -101,23 +61,21 @@ export default function FactorDetailScreen(): React.ReactElement {
   );
 
   const resetCategory = categoryForVariable(base);
-  const resetPlan = resetCategory && resetCategory !== 'mood' ? planItemFor(resetCategory) : null;
+  const how = rule ? ruleHow(rule) : null;
 
   return (
     <Screen aurora={false} edges={[]} contentStyle={{ paddingBottom: 100 }}>
       <Stack.Screen options={{ title: 'Rule' }} />
 
       <Reveal>
-        <Txt variant="heading" style={{ lineHeight: 26 }}>
-          {label}
-        </Txt>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, marginTop: spacing.md }}>
-          <Txt variant="display" style={{ color: tint }}>
-            {today === null ? '—' : signed(today)}
-          </Txt>
-          <Txt tone="muted" style={{ paddingBottom: 6 }}>
-            {today === null ? 'no data today' : `points today · max ${raises ? '+' : '−'}${max}`}
-          </Txt>
+        <Txt variant="title">{label}</Txt>
+        <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg }}>
+          <PointsBox
+            title="Today's points"
+            value={today === null ? '—' : signed(today)}
+            color={tint}
+          />
+          <PointsBox title="Maximum points" value={signed(rule?.points ?? 0)} />
         </View>
       </Reveal>
 
@@ -135,12 +93,10 @@ export default function FactorDetailScreen(): React.ReactElement {
         </Reveal>
       ) : null}
 
-      {rule ? (
+      {how && rule ? (
         <Reveal delay={110}>
-          <Kicker style={{ marginTop: spacing.xl, marginBottom: spacing.sm }}>What it looks at</Kicker>
-          <Txt tone="muted" style={{ lineHeight: 22 }}>
-            {whatItLooksAt(rule)}
-          </Txt>
+          <Kicker style={{ marginTop: spacing.xl, marginBottom: spacing.sm }}>How it works</Kicker>
+          <HowItWorks how={how} />
         </Reveal>
       ) : null}
 
@@ -151,16 +107,90 @@ export default function FactorDetailScreen(): React.ReactElement {
         </Txt>
       </Reveal>
 
-      {resetPlan ? (
+      {resetCategory ? (
         <Reveal delay={210}>
           <Button
-            label={`Try: ${resetPlan.title}`}
+            label={`Try: ${resetCategory.title}`}
             icon={<WindIcon size={17} color={palette.onAccent} />}
-            onPress={() => router.push({ pathname: resetPlan.pathname, params: resetPlan.params } as never)}
+            onPress={() => router.push(categoryPath(resetCategory.key) as never)}
             style={{ marginTop: spacing.xl }}
           />
         </Reveal>
       ) : null}
     </Screen>
+  );
+}
+
+function PointsBox({
+  title,
+  value,
+  color,
+}: {
+  title: string;
+  value: string;
+  color?: string;
+}): React.ReactElement {
+  const { palette } = useTheme();
+  return (
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: palette.surface,
+        borderRadius: radius.md,
+        padding: spacing.md,
+        borderWidth: 1,
+        borderColor: palette.border,
+      }}
+    >
+      <Txt variant="caption" tone="muted">
+        {title}
+      </Txt>
+      <Txt variant="display" style={{ color: color ?? palette.text, marginTop: 2 }}>
+        {value}
+      </Txt>
+    </View>
+  );
+}
+
+/** The same small table for every rule: example readings and the points each gives. */
+function HowItWorks({ how }: { how: RuleHow }): React.ReactElement {
+  const { palette } = useTheme();
+  return (
+    <Card>
+      <View style={{ flexDirection: 'row', gap: spacing.md, paddingBottom: spacing.sm }}>
+        <Txt variant="label" style={{ flex: 1 }}>
+          {how.heading}
+        </Txt>
+        <Txt variant="label">Points</Txt>
+      </View>
+      {how.rows.map((row) => (
+        <View
+          key={row.reading}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.md,
+            paddingVertical: spacing.sm,
+            borderTopWidth: 1,
+            borderTopColor: palette.border,
+          }}
+        >
+          <Txt style={{ flex: 1 }}>{row.reading}</Txt>
+          <Txt
+            variant="heading"
+            style={{
+              color:
+                row.points === 0
+                  ? palette.textFaint
+                  : row.points > 0
+                    ? palette.bandHighText
+                    : palette.bandLowText,
+            }}
+          >
+            {signed(row.points)}
+          </Txt>
+        </View>
+      ))}
+    </Card>
   );
 }

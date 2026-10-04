@@ -1,39 +1,41 @@
 /**
  * Settings (REQUIREMENTS §11.1, FR-7.x) — v2 redesign.
  *
- * A navigational list into five dedicated sub-pages (Profile, Permissions,
- * Export, Model & disclaimer, Delete all data) — was a single page with
- * inline sections and modals. All the underlying logic (profile edits, CSV
- * export, delete confirmation) moved with its section rather than being
- * rewritten.
+ * A list of sub-pages (Profile, Export, AI second opinion, Scoring &
+ * disclaimer, Delete all data), plus "Clear today's check-in" and the hidden
+ * developer tools.
  */
 
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { Alert, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, Pressable, View } from 'react-native';
 
 import {
   ChevronRight,
   CloseIcon,
   ExportIcon,
   PersonIcon,
-  ShieldIcon,
   SparkIcon,
   TrashIcon,
 } from '../../src/components/icons';
 import { PressableScale, Reveal } from '../../src/components/motion';
 import { Card, IconBadge, Kicker, Screen, Txt } from '../../src/components/primitives';
-import { countCheckInDays, deleteCheckIn } from '../../src/db/queries';
-import { DEFAULT_SEED_DAYS, DEV_TOOLS_ENABLED, seedDemoCheckIns } from '../../src/dev/seed';
+import { countCheckInDays, deleteCheckIn, getMeta, setMeta } from '../../src/db/queries';
+import {
+  DEFAULT_SEED_DAYS,
+  DEV_MODE_KEY,
+  DEV_MODE_TAPS,
+  DEV_TOOLS_ENABLED,
+  seedDemoCheckIns,
+} from '../../src/dev/seed';
 import { rulebook, useApp } from '../../src/hooks/appState';
 import { useTheme } from '../../src/hooks/useTheme';
 import { spacing } from '../../src/theme';
-import { formatLong, todayLocal } from '../../src/utils/dates';
+import { todayLocal } from '../../src/utils/dates';
 
 const ROWS = [
   { key: 'profile', title: 'Profile', icon: PersonIcon, path: '/settings-profile' as const, destructive: false },
-  { key: 'permissions', title: 'Permissions', icon: ShieldIcon, path: '/settings-permissions' as const, destructive: false },
-  { key: 'export', title: 'Export as CSV', icon: ExportIcon, path: '/settings-export' as const, destructive: false },
+  { key: 'export', title: 'Export', icon: ExportIcon, path: '/settings-export' as const, destructive: false },
   { key: 'ai', title: 'AI second opinion', icon: SparkIcon, path: '/settings-ai' as const, destructive: false },
   { key: 'model', title: 'Scoring & disclaimer', icon: SparkIcon, path: '/settings-model' as const, destructive: false },
   { key: 'delete', title: 'Delete all data', icon: TrashIcon, path: '/settings-delete' as const, destructive: true },
@@ -42,14 +44,46 @@ const ROWS = [
 export default function SettingsScreen(): React.ReactElement {
   const { palette } = useTheme();
   const router = useRouter();
-  const { profile, db, refresh, analysisMode } = useApp();
+  const { profile, db, refresh } = useApp();
   const [days, setDays] = useState(0);
   const [seeding, setSeeding] = useState(false);
   const [clearing, setClearing] = useState(false);
 
+  const [devMode, setDevMode] = useState(DEV_TOOLS_ENABLED);
+  const taps = useRef({ count: 0, last: 0 });
+
   useEffect(() => {
-    if (db) void countCheckInDays(db).then(setDays);
+    if (!db) return;
+    void countCheckInDays(db).then(setDays);
+    void getMeta(db, DEV_MODE_KEY).then((value) => {
+      if (value !== null) setDevMode(value === '1');
+    });
   }, [db]);
+
+  /** Tapping the footer `DEV_MODE_TAPS` times in quick succession toggles developer mode. */
+  const onFooterTap = (): void => {
+    const now = Date.now();
+    const t = taps.current;
+    t.count = now - t.last < 1500 ? t.count + 1 : 1;
+    t.last = now;
+    if (t.count < DEV_MODE_TAPS || !db) return;
+    t.count = 0;
+    const next = !devMode;
+    setDevMode(next);
+    void setMeta(db, DEV_MODE_KEY, next ? '1' : '0');
+    Alert.alert(next ? 'Developer mode on' : 'Developer mode off');
+  };
+
+  const confirmSeed = (): void => {
+    Alert.alert(
+      `Seed ${DEFAULT_SEED_DAYS} days of demo data?`,
+      `This replaces any check-ins from the last ${DEFAULT_SEED_DAYS} days, including today.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Seed', style: 'destructive', onPress: () => void onSeed() },
+      ],
+    );
+  };
 
   const subtitleFor = (key: (typeof ROWS)[number]['key']): string | undefined => {
     switch (key) {
@@ -58,11 +92,11 @@ export default function SettingsScreen(): React.ReactElement {
           ? `${profile.psoriasisType} · ${profile.onSystemic ? 'on a biologic' : 'topicals only'}`
           : undefined;
       case 'export':
-        return `${days} check-${days === 1 ? 'in' : 'ins'} logged`;
+        return `Save your ${days} check-${days === 1 ? 'in' : 'ins'} as a CSV file`;
       case 'ai':
-        return analysisMode === 'local_plus_ai' ? 'On · sends numbers once a day' : 'Off · nothing leaves this phone';
+        return 'TypeSafe · preview';
       case 'model':
-        return `v${rulebook.rulebook_version} · ${rulebook.rules.length} rules`;
+        return `How the ${rulebook.rules.length} rules are scored`;
       case 'delete':
         return 'Irreversible · requires a typed confirmation';
       default:
@@ -70,7 +104,7 @@ export default function SettingsScreen(): React.ReactElement {
     }
   };
 
-  /** Development only; see `src/dev/seed.ts`. */
+  /** Developer mode only; see `src/dev/seed.ts`. */
   const onSeed = async (): Promise<void> => {
     if (!db) return;
     setSeeding(true);
@@ -85,7 +119,7 @@ export default function SettingsScreen(): React.ReactElement {
       );
     } catch (error) {
       console.error('[fleur] seeding failed', error);
-      Alert.alert('Seeding failed', 'See the Metro logs for details.');
+      Alert.alert('Seeding failed', 'Something went wrong. Please try again.');
     } finally {
       setSeeding(false);
     }
@@ -102,16 +136,9 @@ export default function SettingsScreen(): React.ReactElement {
     if (!db) return;
     setClearing(true);
     try {
-      const date = todayLocal();
-      const removed = await deleteCheckIn(db, date);
+      await deleteCheckIn(db, todayLocal());
       await refresh();
       setDays(await countCheckInDays(db));
-      Alert.alert(
-        removed ? "Today's check-in cleared" : 'Nothing to clear',
-        removed
-          ? `${formatLong(date)} is back to not logged. Open Today to check in again.`
-          : 'There was no check-in saved for today.',
-      );
     } catch (error) {
       console.error('[fleur] could not clear today', error);
       Alert.alert('Could not clear', 'Something went wrong. Please try again.');
@@ -184,15 +211,14 @@ export default function SettingsScreen(): React.ReactElement {
           </PressableScale>
 
           {ROWS.filter((row) => row.destructive).map(renderRow)}
-
         </View>
       </Reveal>
 
-      {/* Development only — `DEV_TOOLS_ENABLED` is `__DEV__`, so this whole
-          block is absent from a release build. It exists because FR-4.2 hides
-          the forecast until 14 days are logged while FR-2.4 caps back-fill at
-          7, leaving the risk screens unreachable by hand on a fresh install. */}
-      {DEV_TOOLS_ENABLED ? (
+      {/* Developer mode only (on by default in development builds; toggled by
+          tapping the footer in release). It exists because FR-4.2 hides the
+          forecast until 14 days are logged while FR-2.4 caps back-fill at 7,
+          leaving the risk screens unreachable by hand on a fresh install. */}
+      {devMode ? (
         <Reveal delay={130}>
           <Card style={{ marginTop: spacing.md, borderStyle: 'dashed', borderWidth: 1.5 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
@@ -202,12 +228,12 @@ export default function SettingsScreen(): React.ReactElement {
               <View style={{ flex: 1 }}>
                 <Txt variant="heading">Developer tools</Txt>
                 <Txt variant="caption" tone="faint" style={{ marginTop: 1 }}>
-                  Not present in a release build
+                  {`Tap the line below ${DEV_MODE_TAPS} times to hide`}
                 </Txt>
               </View>
             </View>
             <View style={{ marginTop: spacing.lg, gap: spacing.md }}>
-              <PressableScale onPress={() => void onSeed()} accessibilityLabel="Seed demo data">
+              <PressableScale onPress={confirmSeed} accessibilityLabel="Seed demo data">
                 <Txt variant="label" tone="accent">
                   {seeding ? 'Seeding…' : `Seed ${DEFAULT_SEED_DAYS} days of demo data`}
                 </Txt>
@@ -217,9 +243,11 @@ export default function SettingsScreen(): React.ReactElement {
         </Reveal>
       ) : null}
 
-      <Txt variant="caption" tone="faint" center style={{ marginTop: spacing.xl }}>
-        Fleur · experimental research prototype
-      </Txt>
+      <Pressable onPress={onFooterTap} style={{ marginTop: spacing.xl, paddingVertical: spacing.sm }}>
+        <Txt variant="caption" tone="faint" center>
+          Fleur · experimental research prototype
+        </Txt>
+      </Pressable>
     </Screen>
   );
 }

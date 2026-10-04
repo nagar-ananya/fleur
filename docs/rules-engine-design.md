@@ -128,17 +128,21 @@ anything — **the rule earns 0 and is skipped.** It is never guessed at.
 
 ## 3. The twelve rules
 
+Points as of rulebook v2.1.0 (2026-10-04): skin was lowered from 60 to 30, and
+sleep, itch and processed food raised to 15 each, to spread the score more
+evenly across the rules.
+
 | # | Rule | What it looks at | Time window | Low mark | High mark | Points |
 |---|---|---|---|---|---|---|
-| 1 | Skin already climbing | How far today's severity is above your own 14-day average | today | 0 | 4 | **60** |
+| 1 | Skin already climbing | How far today's severity is above your own 14-day average | today | 0 | 4 | **30** |
 | 2 | Stress | Average stress | 7–14 days ago | 2 | 8 | **15** |
 | 3 | Recently unwell | Were you ill on any day | 7–14 days ago | no | yes | **10** |
-| 4 | Short sleep | Average hours slept | last 7 days | 8 h | 5 h | **10** |
-| 5 | Itch | Average itch | last 3 days | 3 | 8 | **5** |
+| 4 | Short sleep | Average hours slept | last 7 days | 8 h | 5 h | **15** |
+| 5 | Itch | Average itch | last 3 days | 3 | 8 | **15** |
 | 6 | Sore throat | Any sore throat | 10–14 days ago | no | yes | **5** |
 | 7 | Skin injury | Any cut, scratch or sunburn | 10–14 days ago | no | yes | **5** |
 | 8 | Alcohol | Average units per day | last 5 days | 0 | 4 | **5** |
-| 9 | Processed food | Number of days you logged it | last 7 days | 0 days | 5 days | **5** |
+| 9 | Processed food | Number of days you logged it | last 7 days | 0 days | 5 days | **15** |
 | 10 | Air pollution | Average PM2.5 | last 3 days | 10 | 35 | **5** |
 | 11 | Cold snap | Biggest single-day temperature drop | 1–3 days ago | −2 °C | −8 °C | **5** |
 | 12 | Sunshine | Average UV index | last 7 days | 2 | 7 | **−10** |
@@ -654,16 +658,16 @@ with PM2.5 averaging **22**, UV averaging **3**, and nothing else logged:
 
 | Rule | Value | Low | High | Fraction | Points possible | **Points earned** |
 |---|---|---|---|---|---|---|
-| Skin already climbing | `severity_delta` = 1.857 | 0 | 4 | 0.464 | 60 | **+27.9** |
+| Skin already climbing | `severity_delta` = 1.857 | 0 | 4 | 0.464 | 30 | **+13.9** |
 | Stress | 7.0 | 2 | 8 | 0.833 | 15 | **+12.5** |
-| Short sleep | 7.2 h | 8 | 5 | 0.267 | 10 | **+2.7** |
+| Short sleep | 7.2 h | 8 | 5 | 0.267 | 15 | **+4.0** |
 | Air pollution | 22 | 10 | 35 | 0.48 | 5 | **+2.4** |
 | Sunshine | 3.0 | 2 | 7 | 0.20 | −10 | **−2.0** |
 | Itch, illness, sore throat, skin injury, alcohol, processed food, cold snap | nothing logged | | | | | **0** |
 
-`total = 27.9 + 12.5 + 2.7 + 2.4 − 2.0 = 43.4` → **score 43**
+`total = 13.9 + 12.5 + 4.0 + 2.4 − 2.0 = 30.8` → **score 31**
 
-43 is between 30 and 50 → band **Elevated**.
+31 is between 30 and 50 → band **Elevated**.
 
 Note where the 1.857 comes from, because it is the easiest thing to get wrong:
 `severity_baseline` is the 14-day mean **including today**. Thirteen days at 3
@@ -671,10 +675,10 @@ and today at 5 gives 44/14 = 3.143, so the delta is 5 − 3.143 = 1.857 — not 
 2.0 you get by comparing against the old level. Today is always part of its own
 baseline.
 
-Top three drivers: skin already climbing (+27.9), stress (+12.5), short sleep
-(+2.7). Helping: sunshine (−2).
+Top three drivers: skin already climbing (+13.9), stress (+12.5), short sleep
+(+4.0). Helping: sunshine (−2).
 
-**Write a test asserting `score === 43` and `band === 'elevated'` on exactly
+**Write a test asserting `score === 31` and `band === 'elevated'` on exactly
 this input, and make it pass before touching a single screen.** If the number
 comes out wrong, the bug is almost certainly in `lookUp`'s window arithmetic —
 check that `from: 7, to: 14` reads days `index-14` through `index-7` with **both

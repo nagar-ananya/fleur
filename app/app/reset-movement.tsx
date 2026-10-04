@@ -1,121 +1,131 @@
 /**
- * Reset → Movement session. Only the flagship "Evening unwind flow" carries a
- * real step sequence (from the source design); the other five sessions get
- * an honest overview card rather than an invented pose-by-pose routine.
+ * Reset → Movement → a timer. Starts as soon as it opens, keeps the screen
+ * on while it runs, and rings (chime + vibration) until stopped when time is
+ * up. What to do while it runs is listed underneath.
  */
 
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { useKeepAwake } from 'expo-keep-awake';
+import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
-import { PauseIcon, PersonMoveIcon, PlayIcon } from '../src/components/icons';
-import { PressableScale, Reveal } from '../src/components/motion';
-import { Button, Card, IconBadge, Kicker, Screen, Txt } from '../src/components/primitives';
-import { MOVE_SESSIONS, YOGA_STEPS } from '../src/constants/reset';
+import { Reveal } from '../src/components/motion';
+import { Button, Card, Kicker, Screen, Txt } from '../src/components/primitives';
+import { MOVE_TIMERS } from '../src/constants/reset';
+import { useAlarm } from '../src/hooks/useAlarm';
+import { formatClock, useCountdown } from '../src/hooks/useCountdown';
 import { useTheme } from '../src/hooks/useTheme';
-import { spacing, radius } from '../src/theme';
+import { radius, spacing } from '../src/theme';
 
-export default function MovementSessionScreen(): React.ReactElement {
+export default function MovementTimerScreen(): React.ReactElement {
+  useKeepAwake();
   const { palette } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
-  const session = MOVE_SESSIONS.find((s) => s.id === params.id) ?? MOVE_SESSIONS[0];
-  const [playing, setPlaying] = useState(false);
+  const timer = MOVE_TIMERS.find((t) => t.id === params.id) ?? MOVE_TIMERS[0];
+  const total = timer.minutes * 60;
+  const clock = useCountdown(total);
+  const alarm = useAlarm();
+  const [ringing, setRinging] = useState(false);
+
+  useEffect(() => {
+    if (clock.done) {
+      alarm.ring();
+      setRinging(true);
+    }
+    // Ring once per finish, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clock.done]);
+
+  const stopAlarm = (): void => {
+    alarm.stop();
+    setRinging(false);
+  };
+
+  const progress = 1 - clock.secondsLeft / total;
 
   return (
-    <Screen contentStyle={{ paddingBottom: spacing.xxl }}>
-      <Stack.Screen options={{ title: session.title }} />
+    <Screen aurora={false} edges={[]} contentStyle={{ paddingBottom: spacing.xxl }}>
+      <Stack.Screen options={{ title: 'Movement' }} />
       <Reveal>
-        <Txt variant="title">{session.title}</Txt>
+        <Txt variant="title">{timer.title}</Txt>
         <Txt tone="muted" style={{ marginTop: spacing.xs }}>
-          {`Movement · ${session.meta}`}
+          {`${timer.minutes} min timer`}
         </Txt>
       </Reveal>
 
-      <Reveal delay={70}>
-        <Card
-          level={2}
-          style={{ marginTop: spacing.xl, alignItems: 'center', paddingVertical: spacing.xxl }}
-        >
-          <PressableScale
-            onPress={() => setPlaying((p) => !p)}
-            accessibilityLabel={playing ? 'Pause' : 'Start'}
+      <Reveal delay={60}>
+        <Card level={2} style={{ marginTop: spacing.xl, alignItems: 'center', paddingVertical: spacing.xxl }}>
+          <Txt
             style={{
-              width: 68,
-              height: 68,
-              borderRadius: 34,
-              borderWidth: 1,
-              borderColor: palette.primary,
-              backgroundColor: palette.primarySoft,
-              alignItems: 'center',
-              justifyContent: 'center',
+              fontSize: 76,
+              lineHeight: 84,
+              fontWeight: '700',
+              letterSpacing: -2,
+              color: clock.done ? palette.bandLowText : palette.text,
+              fontVariant: ['tabular-nums'],
             }}
           >
-            {playing ? (
-              <PauseIcon size={24} color={palette.primary} />
-            ) : (
-              <PlayIcon size={24} color={palette.primary} />
-            )}
-          </PressableScale>
-          <Txt variant="caption" tone="faint" style={{ marginTop: spacing.md }}>
-            {playing ? 'In progress' : 'Tap to begin'}
+            {clock.done ? 'Done!' : formatClock(clock.secondsLeft)}
           </Txt>
-        </Card>
-      </Reveal>
-
-      {session.flagship ? (
-        <Reveal delay={130}>
-          <Kicker style={{ marginTop: spacing.xl }}>Sequence</Kicker>
-          <View style={{ marginTop: spacing.md }}>
-            {YOGA_STEPS.map((step) => (
-              <View
-                key={step.n}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: spacing.md,
-                  paddingVertical: spacing.sm,
-                }}
-              >
-                <Txt variant="caption" tone="accent" style={{ width: 22 }}>
-                  {step.n}
-                </Txt>
-                <Txt style={{ flex: 1 }}>{step.t}</Txt>
-                <Txt variant="caption" tone="faint">
-                  {step.d}
-                </Txt>
-              </View>
-            ))}
+          <Txt tone="muted" style={{ marginTop: spacing.xs }}>
+            {clock.done ? "Time's up" : clock.running ? 'Keep going' : 'Paused'}
+          </Txt>
+          <View
+            style={{
+              alignSelf: 'stretch',
+              height: 10,
+              marginTop: spacing.xl,
+              borderRadius: radius.pill,
+              backgroundColor: palette.surfaceAlt,
+              overflow: 'hidden',
+            }}
+          >
+            <View
+              style={{
+                width: `${Math.round(progress * 100)}%`,
+                height: 10,
+                borderRadius: radius.pill,
+                backgroundColor: clock.done ? palette.bandLowFill : palette.primary,
+              }}
+            />
           </View>
-        </Reveal>
-      ) : (
-        <Reveal delay={130}>
-          <Card style={{ marginTop: spacing.xl, alignItems: 'center', paddingVertical: spacing.xl }}>
-            <IconBadge background={palette.primarySoft} size={44}>
-              <PersonMoveIcon size={20} color={palette.primary} />
-            </IconBadge>
-            <Txt tone="muted" center style={{ marginTop: spacing.md, lineHeight: 21 }}>
-              Move at your own pace for the length above. There is no fixed sequence for this
-              one — follow what your body allows today.
-            </Txt>
-          </Card>
-        </Reveal>
-      )}
-
-      <Reveal delay={190}>
-        <Card
-          tone="alt"
-          level={1}
-          style={{ marginTop: spacing.xl, borderRadius: radius.lg }}
-        >
-          <Txt variant="caption" tone="muted" style={{ lineHeight: 19 }}>
-            Stop if anything pulls on a plaque or a fissure. Friction and stretching over broken
-            skin are the Koebner route, and skin injury is one of the factors in your profile.
-          </Txt>
         </Card>
       </Reveal>
 
-      <Button label="Done" variant="secondary" onPress={() => router.back()} style={{ marginTop: spacing.xl }} />
+      <Reveal delay={100}>
+        {ringing ? (
+          <Button label="Stop alarm" onPress={stopAlarm} style={{ marginTop: spacing.lg }} />
+        ) : clock.done ? (
+          <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg }}>
+            <Button label="Again" variant="secondary" onPress={clock.restart} style={{ flex: 1 }} />
+            <Button label="Finish" onPress={() => router.back()} style={{ flex: 1 }} />
+          </View>
+        ) : (
+          <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg }}>
+            <Button
+              label={clock.running ? 'Pause' : 'Resume'}
+              onPress={clock.running ? clock.pause : clock.resume}
+              style={{ flex: 1 }}
+            />
+            <Button label="Restart" variant="secondary" onPress={clock.restart} style={{ flex: 1 }} />
+          </View>
+        )}
+      </Reveal>
+
+      <Reveal delay={140}>
+        <Card style={{ marginTop: spacing.xl }}>
+          <Kicker style={{ marginBottom: spacing.sm }}>What to do</Kicker>
+          {timer.steps.map((step, i) => (
+            <View key={step} style={{ flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.sm }}>
+              <Txt tone="accent" style={{ width: 18, fontWeight: '700' }}>
+                {i + 1}
+              </Txt>
+              <Txt style={{ flex: 1 }}>{step}</Txt>
+            </View>
+          ))}
+        </Card>
+      </Reveal>
     </Screen>
   );
 }

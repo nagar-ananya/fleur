@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "rulebook_version": "2.0.0",
-  "authored_at": "2026-09-27",
+  "rulebook_version": "2.1.0",
+  "authored_at": "2026-10-04",
   "horizon_hours": 72,
   "min_days_required": 14,
   "bands": {
@@ -25,9 +25,9 @@
   "rules": [
     {
       "id": "skin_climbing",
-      "label": "Your skin is above your own two-week average",
+      "label": "Skin getting worse",
       "variable": "severity_delta",
-      "points": 60,
+      "points": 30,
       "look_at": {
         "column": "severity_delta",
         "how": "today"
@@ -37,7 +37,7 @@
     },
     {
       "id": "stress",
-      "label": "Stress a week or two ago",
+      "label": "Stress",
       "variable": "stress",
       "points": 15,
       "look_at": {
@@ -51,7 +51,7 @@
     },
     {
       "id": "illness",
-      "label": "You were unwell a week or two ago",
+      "label": "Being sick",
       "variable": "illness",
       "points": 10,
       "look_at": {
@@ -65,9 +65,9 @@
     },
     {
       "id": "short_sleep",
-      "label": "Short sleep this week",
+      "label": "Short sleep",
       "variable": "sleep_hours",
-      "points": 10,
+      "points": 15,
       "look_at": {
         "column": "sleep_hours",
         "how": "average",
@@ -79,9 +79,9 @@
     },
     {
       "id": "itch",
-      "label": "Itch over the last few days",
+      "label": "Itch",
       "variable": "itch",
-      "points": 5,
+      "points": 15,
       "look_at": {
         "column": "itch",
         "how": "average",
@@ -93,7 +93,7 @@
     },
     {
       "id": "sore_throat",
-      "label": "Sore throat about two weeks ago",
+      "label": "Sore throat",
       "variable": "sore_throat",
       "points": 5,
       "look_at": {
@@ -107,7 +107,7 @@
     },
     {
       "id": "skin_injury",
-      "label": "Skin injury about two weeks ago",
+      "label": "Skin injury",
       "variable": "skin_injury",
       "points": 5,
       "look_at": {
@@ -121,7 +121,7 @@
     },
     {
       "id": "alcohol",
-      "label": "Alcohol over the last five days",
+      "label": "Alcohol",
       "variable": "alcohol_units",
       "points": 5,
       "look_at": {
@@ -135,9 +135,9 @@
     },
     {
       "id": "processed_food",
-      "label": "Processed-food days this week",
+      "label": "Processed food",
       "variable": "diet_processed",
-      "points": 5,
+      "points": 15,
       "look_at": {
         "column": "diet_processed",
         "how": "total",
@@ -149,7 +149,7 @@
     },
     {
       "id": "pollution",
-      "label": "Air pollution over the last three days",
+      "label": "Air pollution",
       "variable": "pm2_5",
       "points": 5,
       "look_at": {
@@ -163,7 +163,7 @@
     },
     {
       "id": "cold_snap",
-      "label": "A sharp temperature drop this week",
+      "label": "Temperature drop",
       "variable": "temp_delta_1d",
       "points": 5,
       "look_at": {
@@ -177,7 +177,7 @@
     },
     {
       "id": "sunshine",
-      "label": "Sunshine over the past week",
+      "label": "Sunshine",
       "variable": "uv_index_max",
       "points": -10,
       "look_at": {

@@ -36,16 +36,16 @@ describe('scoreDay — the §10 worked example', () => {
   const result = scoreDay(frame, frame.dates.length - 1, rulebook);
   const points = (id: string): number => result.rules.find((r) => r.id === id)?.points ?? 0;
 
-  it('scores 43 and reads Elevated', () => {
-    expect(result.score).toBe(43);
+  it('scores 31 and reads Elevated', () => {
+    expect(result.score).toBe(31);
     expect(result.band).toBe('elevated');
   });
 
   it('gives each rule the points the table says', () => {
     // severity 5 against a 14-day mean of 44/14 = 3.142857 -> delta 1.857143.
-    expect(points('skin_climbing')).toBeCloseTo(27.857, 2);
+    expect(points('skin_climbing')).toBeCloseTo(13.929, 2);
     expect(points('stress')).toBeCloseTo(12.5, 3);
-    expect(points('short_sleep')).toBeCloseTo(2.667, 2);
+    expect(points('short_sleep')).toBeCloseTo(4.0, 3);
     expect(points('pollution')).toBeCloseTo(2.4, 3);
     expect(points('sunshine')).toBeCloseTo(-2, 3);
   });

@@ -96,3 +96,16 @@ export function wholeParts(values: readonly number[]): number[] {
   }
   return floors;
 }
+
+/**
+ * Each scored rule's whole points, keyed by rule id, rounded together with
+ * `wholeParts` in rulebook order — so every screen shows the same whole
+ * number for a rule, and those numbers add up to the score.
+ */
+export function wholePointsById(rules: readonly RuleScore[], book: Rulebook): Map<string, number> {
+  const present = book.rules
+    .map((rule) => rules.find((r) => r.id === rule.id))
+    .filter((r): r is RuleScore => r !== undefined);
+  const parts = wholeParts(present.map((r) => r.points));
+  return new Map(present.map((r, i) => [r.id, parts[i]]));
+}

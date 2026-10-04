@@ -1,7 +1,7 @@
 /**
  * User-facing copy (REQUIREMENTS §13).
  *
- * The disclaimers and the Insights preamble are quoted verbatim from the spec
+ * The disclaimers are quoted verbatim from the spec
  * and must not be paraphrased. Everything else follows §13.1: "risk",
  * "pattern", "association", "may" — never "will", "predicts", "diagnosis",
  * or "prevents", and never a treatment recommendation.
@@ -17,11 +17,6 @@ export const DISCLAIMER_FULL =
 
 /** §13.2 short form — required on every screen showing a risk value (FR-4.6). */
 export const DISCLAIMER_SHORT = 'Experimental. Not medical advice.';
-
-/** §11.4 required verbatim above the Insights chart. */
-export const INSIGHTS_PREAMBLE =
-  'These are patterns, not proven causes. A factor appearing here means it moved ' +
-  'together with flares in the data — not that it caused them.';
 
 /**
  * How Fleur states the headline number — used on both Today and

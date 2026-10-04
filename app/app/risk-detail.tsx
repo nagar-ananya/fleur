@@ -2,11 +2,11 @@
  * Risk detail — "How your score adds up" (REQUIREMENTS §11.1 `/risk-detail`).
  *
  * Kept deliberately short: the score, where it sits on the band scale, and
- * all of the rulebook's rules as a numbered list (fixed rulebook order, the
- * same numbers the check-in uses) with the whole points each
- * one added today. The rounded points add up to the total printed under
- * them (`wholeParts`), so the list can be checked by hand. Tapping a rule
- * opens its two-week chart on `/factor-detail`.
+ * a plain table of all the rulebook's rules (fixed rulebook order, the same
+ * numbers the check-in uses) showing the whole points each one added today
+ * out of its maximum. The rounded points add up to the total printed under
+ * them (`wholeParts`), so the table can be checked by hand. Rows are not
+ * tappable — what each rule means, and its chart, live on the Rules tab.
  */
 
 import { Stack, useRouter } from 'expo-router';
@@ -18,7 +18,7 @@ import { PressableScale, Reveal } from '../src/components/motion';
 import { Card, Kicker, Screen, ShortDisclaimer, Txt } from '../src/components/primitives';
 import { rulebook, useApp } from '../src/hooks/appState';
 import { useTheme } from '../src/hooks/useTheme';
-import { wholeParts } from '../src/logic/engine';
+import { wholePointsById } from '../src/logic/engine';
 import { bandStyle, radius, spacing } from '../src/theme';
 
 interface Row {
@@ -26,6 +26,8 @@ interface Row {
   label: string;
   /** Whole points added today, or null when the rule had no data to look at. */
   points: number | null;
+  /** Most the rule can add (negative for rules that take points off). */
+  max: number;
 }
 
 export default function RiskDetailScreen(): React.ReactElement {
@@ -48,17 +50,15 @@ export default function RiskDetailScreen(): React.ReactElement {
   const style = bandStyle(risk.band, palette);
   const score = risk.score;
 
-  const scored = rulebook.rules.map((rule) => risk.rules.find((r) => r.id === rule.id) ?? null);
-  const present = scored.filter((r) => r !== null);
-  const parts = wholeParts(present.map((r) => r.points));
-  const partById = new Map(present.map((r, i) => [r.id, parts[i]]));
+  const partById = wholePointsById(risk.rules, rulebook);
   // Fixed rulebook order, so "Rule 3" here is "Rule 3" in the check-in too.
   const rows: Row[] = rulebook.rules.map((rule) => ({
     id: rule.id,
     label: rule.label,
     points: partById.get(rule.id) ?? null,
+    max: rule.points,
   }));
-  const total = parts.reduce((t, v) => t + v, 0);
+  const total = [...partById.values()].reduce((t, v) => t + v, 0);
 
   const { elevated, high } = rulebook.bands;
 
@@ -100,64 +100,54 @@ export default function RiskDetailScreen(): React.ReactElement {
       </Reveal>
 
       <Reveal delay={60}>
-        <View
-          style={{
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            marginTop: spacing.xl,
-            marginBottom: spacing.sm,
-          }}
-        >
-          <Kicker>{`The ${rulebook.rules.length} rules`}</Kicker>
-          <Kicker>Points</Kicker>
-        </View>
-        <View style={{ gap: spacing.sm }}>
+        <Card style={{ marginTop: spacing.xl }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.xs }}>
+            <Kicker>{`The ${rulebook.rules.length} rules`}</Kicker>
+            <Kicker>Today / max</Kicker>
+          </View>
           {rows.map((row, i) => (
-            <RuleRow
-              key={row.id}
-              number={i + 1}
-              row={row}
-              onPress={() =>
-                router.push({
-                  pathname: '/factor-detail',
-                  params: {
-                    ruleId: row.id,
-                    label: row.label,
-                    ...(row.points === null ? {} : { points: String(row.points) }),
-                  },
-                })
-              }
-            />
+            <RuleRow key={row.id} number={i + 1} row={row} />
           ))}
-        </View>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingTop: spacing.md,
+              borderTopWidth: 2,
+              borderTopColor: palette.borderStrong,
+            }}
+          >
+            <Txt variant="heading" style={{ flex: 1 }}>
+              Total
+            </Txt>
+            <Txt variant="heading" style={{ color: style.text }}>
+              {total === score ? `${score}` : `${total} → ${score}`}
+            </Txt>
+          </View>
+          {total !== score ? (
+            <Txt variant="caption" tone="faint" style={{ textAlign: 'right', marginTop: 2 }}>
+              {total > score ? 'The score tops out at 100' : 'The score never goes below 0'}
+            </Txt>
+          ) : null}
+        </Card>
 
-        <View
+        <PressableScale
+          onPress={() => router.navigate('/rules')}
+          accessibilityLabel="What do these rules mean? Open Rules"
           style={{
             flexDirection: 'row',
             alignItems: 'center',
-            marginTop: spacing.md,
-            paddingTop: spacing.md,
-            paddingHorizontal: spacing.md,
-            borderTopWidth: 1,
-            borderTopColor: palette.border,
+            justifyContent: 'center',
+            gap: 4,
+            marginTop: spacing.lg,
+            paddingVertical: spacing.md,
           }}
         >
-          <Txt variant="label" style={{ flex: 1 }}>
-            Total
+          <Txt variant="label" tone="accent">
+            What do these rules mean? See Rules
           </Txt>
-          <Txt variant="heading" style={{ color: style.text }}>
-            {total === score ? `${score}` : `${total} → ${score}`}
-          </Txt>
-        </View>
-        {total !== score ? (
-          <Txt variant="caption" tone="faint" style={{ textAlign: 'right', marginTop: 2 }}>
-            {total > score ? 'The score tops out at 100' : 'The score never goes below 0'}
-          </Txt>
-        ) : null}
-
-        <Txt variant="caption" tone="faint" style={{ textAlign: 'center', marginTop: spacing.xl }}>
-          Tap a rule to see its last two weeks.
-        </Txt>
+          <ChevronRight size={16} color={palette.primary} />
+        </PressableScale>
       </Reveal>
 
       <ShortDisclaimer />
@@ -208,65 +198,56 @@ function BandScale({
   );
 }
 
-function RuleRow({
-  number,
-  row,
-  onPress,
-}: {
-  number: number;
-  row: Row;
-  onPress: () => void;
-}): React.ReactElement {
+function RuleRow({ number, row }: { number: number; row: Row }): React.ReactElement {
   const { palette } = useTheme();
   const active = row.points !== null && row.points !== 0;
-  const tint =
-    row.points === null || row.points === 0
-      ? palette.textFaint
-      : row.points > 0
-        ? palette.bandHighText
-        : palette.bandLowText;
-  const value =
-    row.points === null ? '—' : row.points > 0 ? `+${row.points}` : row.points < 0 ? `−${-row.points}` : '0';
+  const tint = !active
+    ? palette.textFaint
+    : (row.points ?? 0) > 0
+      ? palette.bandHighText
+      : palette.bandLowText;
+  const signed = (n: number): string => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0');
+  const today = row.points === null ? '—' : signed(row.points);
   const spoken =
     row.points === null
       ? 'no data yet'
-      : row.points >= 0
-        ? `adds ${row.points} points`
-        : `takes off ${-row.points} points`;
+      : `${row.points >= 0 ? 'added' : 'took off'} ${Math.abs(row.points)} of ${Math.abs(row.max)} points`;
 
   return (
-    <PressableScale onPress={onPress} accessibilityLabel={`Rule ${number}: ${row.label}, ${spoken}`} scaleTo={0.98}>
-      <Card padded={false} style={{ opacity: active ? 1 : 0.6 }}>
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: spacing.md,
-            paddingVertical: spacing.md,
-            paddingHorizontal: spacing.md,
-          }}
-        >
-          <View
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: 15,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: palette.surfaceAlt,
-            }}
-          >
-            <Txt variant="label" tone="muted">
-              {number}
-            </Txt>
-          </View>
-          <Txt style={{ flex: 1, lineHeight: 21 }}>{row.label}</Txt>
-          <Txt variant="heading" style={{ color: tint, minWidth: 40, textAlign: 'right' }}>
-            {value}
-          </Txt>
-          <ChevronRight size={14} color={palette.textFaint} />
-        </View>
-      </Card>
-    </PressableScale>
+    <View
+      accessible
+      accessibilityLabel={`Rule ${number}: ${row.label}, ${spoken}`}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.md,
+        paddingVertical: spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: palette.border,
+        opacity: active ? 1 : 0.55,
+      }}
+    >
+      <View
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: 14,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: palette.surfaceAlt,
+        }}
+      >
+        <Txt variant="caption" tone="muted" style={{ fontWeight: '700' }}>
+          {number}
+        </Txt>
+      </View>
+      <Txt style={{ flex: 1, lineHeight: 21 }}>{row.label}</Txt>
+      <Txt style={{ minWidth: 72, textAlign: 'right' }}>
+        <Txt variant="heading" style={{ color: tint }}>
+          {today}
+        </Txt>
+        <Txt tone="faint">{` / ${signed(row.max)}`}</Txt>
+      </Txt>
+    </View>
   );
 }

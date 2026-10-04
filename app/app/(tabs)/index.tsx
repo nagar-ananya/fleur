@@ -634,7 +634,7 @@ function ConditionsStrip({
     items.push({
       key: 'temp',
       icon: <ThermometerIcon size={18} color={palette.primary} />,
-      value: `${Math.round(conditions.tempMeanC)}°`,
+      value: `${Math.round((conditions.tempMeanC * 9) / 5 + 32)}°F`,
       label: 'Temp',
     });
   }

@@ -54,7 +54,7 @@ const WEATHER_READINGS: Readonly<
   Record<string, { field: keyof EnvironmentDay; format: (v: number) => string }>
 > = {
   pm2_5: { field: 'pm25', format: (v) => `PM2.5 ${Math.round(v)}` },
-  temp_delta_1d: { field: 'tempMeanC', format: (v) => `${Math.round(v)}°C today` },
+  temp_delta_1d: { field: 'tempMeanC', format: (v) => `${Math.round((v * 9) / 5 + 32)}°F today` },
   uv_index_max: { field: 'uvIndexMax', format: (v) => `UV ${v.toFixed(1)}` },
 };
 
