@@ -1,12 +1,3 @@
-/**
- * Database tests (REQUIREMENTS §15.2).
- *
- * Required cases: migration from empty; the unique-per-date constraint;
- * delete-all clearing everything. Runs against real SQLite via the mock in
- * `src/db/__mocks__/expo-sqlite.ts`, so the schema's CHECK constraints and
- * upsert semantics are genuinely exercised.
- */
-
 import * as SQLite from 'expo-sqlite';
 
 import { resetDatabase, runMigrations } from '../migrations';
@@ -71,7 +62,6 @@ describe('migrations', () => {
     const db = await freshDb();
     await saveCheckIn(db, checkIn('2026-01-01'));
     await runMigrations(db);
-    // Re-running must not wipe anything.
     expect(await countCheckInDays(db)).toBe(1);
   });
 });
@@ -99,7 +89,7 @@ describe('check-ins', () => {
     expect(await getCheckIn(db, '2026-02-01')).toEqual(original);
   });
 
-  it('allows exactly one row per date, overwriting on a second save (FR-2.5)', async () => {
+  it('allows exactly one row per date, overwriting on a second save', async () => {
     const db = await freshDb();
     await saveCheckIn(db, checkIn('2026-02-01', { severity: 3 }));
     await saveCheckIn(db, checkIn('2026-02-01', { severity: 9, notes: 'worse' }));
@@ -130,7 +120,7 @@ describe('check-ins', () => {
     await expect(saveCheckIn(db, checkIn('2026-02-01', { severity: 47 }))).rejects.toThrow();
   });
 
-  it('finds the previous check-in for slider pre-fill (FR-2.3)', async () => {
+  it('finds the previous check-in for slider pre-fill', async () => {
     const db = await freshDb();
     await saveCheckIn(db, checkIn('2026-02-01', { severity: 2, stress: 3 }));
     await saveCheckIn(db, checkIn('2026-02-04', { severity: 6, stress: 8 }));
@@ -147,7 +137,6 @@ describe('check-ins', () => {
 
     expect(await deleteCheckIn(db, '2026-02-02')).toBe(true);
     expect(await getCheckIn(db, '2026-02-02')).toBeNull();
-    // Only the targeted day goes.
     expect(await getCheckIn(db, '2026-02-01')).not.toBeNull();
     expect(await countCheckInDays(db)).toBe(1);
   });
@@ -193,7 +182,7 @@ describe('profile', () => {
   });
 });
 
-describe('the ML join', () => {
+describe('loading rows for scoring', () => {
   it('merges checkin, environment and wearable onto one row per date', async () => {
     const db = await freshDb();
     await saveCheckIn(db, checkIn('2026-03-10', { severity: 6, stress: 7, sleepHours: 5 }));
@@ -236,16 +225,10 @@ describe('the ML join', () => {
     expect(row?.severity).toBe(6);
     expect(row?.pm2_5).toBe(12.3);
     expect(row?.sleep_hours).toBe(5);
-    // The device value travels under its own key; HD-5 precedence is applied
-    // later, in features.ts, so both remain visible here.
     expect(row?.sleep_hours_device).toBe(6.8);
   });
 
   it('survives two overlapping environment writes', async () => {
-    // Regression: on a first launch there is no `fetched_at` to rate-limit
-    // against, so two refreshes ran at once and the non-serialised
-    // `withTransactionAsync` produced "cannot start a transaction within a
-    // transaction", losing the whole batch.
     const db = await freshDb();
     const day = (date: string, temp: number) => ({
       date,
@@ -331,7 +314,7 @@ describe('predictions', () => {
   });
 });
 
-describe('CSV export (FR-6.3)', () => {
+describe('CSV export', () => {
   it('emits a header even with nothing logged', async () => {
     const csv = await exportCsv(await freshDb());
     expect(csv.split('\n')[0]).toContain('date,severity');
@@ -345,7 +328,7 @@ describe('CSV export (FR-6.3)', () => {
   });
 });
 
-describe('delete all data (FR-7.2 / PRIV-4)', () => {
+describe('delete all data', () => {
   it('clears every table and leaves a usable empty database', async () => {
     const db = await freshDb();
     await saveProfile(db, profile);
@@ -368,7 +351,6 @@ describe('delete all data (FR-7.2 / PRIV-4)', () => {
     );
     expect(predictions?.n).toBe(0);
 
-    // Still writable afterwards — the user lands back on onboarding, not a crash.
     await saveCheckIn(db, checkIn('2026-05-02'));
     expect(await countCheckInDays(db)).toBe(1);
   });

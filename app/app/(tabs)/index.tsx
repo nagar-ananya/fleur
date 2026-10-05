@@ -1,21 +1,3 @@
-/**
- * Today (REQUIREMENTS §11.2) — v2 redesign.
- *
- * States: Collecting, Sparse, Ready, Logged. Scoring is synchronous, so the
- * risk value is present on first paint — no spinner, no network (FR-4.1).
- *
- * The dial is the screen. Everything else is arranged around it in decreasing
- * order of what a person opening the app actually wants: how am I, what do I
- * do next, how have I been, what is it like outside.
- *
- * SPEC-DEVIATION from the source design: the design's Today screen shows a
- * per-day "chance it starts that day" for the next three days. The model
- * only ever produces one 72-hour aggregate probability (§8.1) — there is no
- * real per-day sub-score to show — so that row is left out rather than
- * invented. The last seven days of the same score are charted below it
- * instead.
- */
-
 import * as Location from 'expo-location';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -32,7 +14,6 @@ import {
   PlusIcon,
   SunIcon,
   ThermometerIcon,
-  TrendUpIcon,
   CheckIcon,
 } from '../../src/components/icons';
 import { PressableScale, Reveal, useCountUp } from '../../src/components/motion';
@@ -83,14 +64,11 @@ export default function TodayScreen(): React.ReactElement {
   const [conditions, setConditions] = useState<EnvironmentDay | null>(null);
   const [lastFetch, setLastFetch] = useState<string | null>(null);
   const today = todayLocal();
-  // The same scores as the card above, worked out for each of the last 7 days.
   const trend =
     risk.status === 'ready'
       ? risk.history.slice(-7).map((day) => ({ date: day.date, value: day.score }))
       : [];
 
-  // Recompute whenever the screen regains focus — returning from a check-in
-  // must show the updated number (FR-4.3).
   useFocusEffect(
     useCallback(() => {
       void refresh();
@@ -132,11 +110,8 @@ export default function TodayScreen(): React.ReactElement {
     [profile, refreshEnvironment],
   );
 
-  // FR-3.1: refresh on open when the cache is stale. Failures are silent here
-  // and surface only as the non-blocking indicator below (FR-3.3).
   useEffect(() => {
     void doEnvironmentRefresh(false);
-    // Only on mount / when the profile's coordinates first arrive.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.latitude, profile?.longitude]);
 
@@ -155,33 +130,32 @@ export default function TodayScreen(): React.ReactElement {
   };
 
   return (
-    <Screen contentStyle={{ paddingBottom: 120 }}>
+    <Screen contentStyle={{ paddingBottom: spacing.xxxl }}>
       <Reveal>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <View>
-            <Kicker style={{ letterSpacing: 2.4 }}>FLEUR</Kicker>
-            <Txt tone="faint" variant="caption" style={{ marginTop: 6 }}>
-              {`${formatLong(today)} · day ${checkinDays}`}
-            </Txt>
-          </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Txt variant="title" tone="accent">
+            Fleur
+          </Txt>
           <PressableScale
             onPress={() => void onExport()}
             accessibilityLabel="Export your data as CSV"
             style={{
-              width: 40,
-              height: 40,
-              borderRadius: radius.md,
+              width: 44,
+              height: 44,
+              borderRadius: 22,
               alignItems: 'center',
               justifyContent: 'center',
-              borderWidth: 1,
-              borderColor: palette.border,
+              backgroundColor: palette.surface,
             }}
           >
-            <ExportIcon size={17} color={palette.textMuted} />
+            <ExportIcon size={18} color={palette.textMuted} />
           </PressableScale>
         </View>
-        <Txt variant="title" style={{ marginTop: spacing.sm }}>
+        <Txt variant="display" style={{ marginTop: spacing.md }}>
           {greeting()}
+        </Txt>
+        <Txt tone="muted" style={{ marginTop: 2 }}>
+          {`${formatLong(today)} - day ${checkinDays}`}
         </Txt>
       </Reveal>
 
@@ -210,7 +184,6 @@ export default function TodayScreen(): React.ReactElement {
         </View>
       </Reveal>
 
-      {/* FR-3.3: non-blocking indicator, never a modal or an error state. */}
       {environmentStatus === 'unavailable' ? (
         <Reveal delay={100}>
           <Card tone="alt" style={{ marginTop: spacing.md }} level={1}>
@@ -218,7 +191,7 @@ export default function TodayScreen(): React.ReactElement {
               <CloudOffIcon size={17} color={palette.textFaint} />
               <View style={{ flex: 1 }}>
                 <Txt variant="caption" tone="muted">
-                  {`Environment data unavailable${lastFetch ? ` · cached ${formatRelativeTime(lastFetch)}` : ''}. Your risk still computes on-device.`}
+                  {`Couldn't get the weather right now${lastFetch ? ` (last updated ${formatRelativeTime(lastFetch)})` : ''}. Your score still works without it.`}
                 </Txt>
               </View>
               <PressableScale onPress={() => void doEnvironmentRefresh(true)} accessibilityLabel="Retry">
@@ -242,20 +215,13 @@ export default function TodayScreen(): React.ReactElement {
       {trend.length > 1 ? (
         <Reveal delay={200}>
           <Card style={{ marginTop: spacing.md }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <View>
-                <Txt variant="heading">Last 7 days</Txt>
-                <Txt variant="caption" tone="faint" style={{ marginTop: 2 }}>
-                  Your flare score each day
-                </Txt>
-              </View>
-              <IconBadge background={palette.aquaSoft} size={32}>
-                <TrendUpIcon size={17} color={palette.aqua} />
-              </IconBadge>
-            </View>
+            <Txt variant="heading">Last 7 days</Txt>
+            <Txt variant="caption" tone="faint" style={{ marginTop: 2, marginBottom: spacing.sm }}>
+              Your flare score each day
+            </Txt>
             <TrendChart
               points={trend}
-              height={130}
+              height={150}
               max={100}
               interactive
               describe={(v) => `${v} points`}
@@ -278,7 +244,6 @@ export default function TodayScreen(): React.ReactElement {
         </Reveal>
       ) : null}
 
-      {/* §17: additive only. The number above is always the local one. */}
       {analysisMode === 'local_plus_ai' && risk.status === 'ready' ? (
         <Reveal delay={290}>
           <AiCard
@@ -296,14 +261,10 @@ export default function TodayScreen(): React.ReactElement {
   );
 }
 
-// --------------------------------------------------------------------------
-// Hero states
-// --------------------------------------------------------------------------
-
 function LoadingCard(): React.ReactElement {
   return (
     <Card style={{ minHeight: 260, alignItems: 'center', justifyContent: 'center' }}>
-      <Txt tone="faint">Reading your recent days…</Txt>
+      <Txt tone="faint">Loading…</Txt>
     </Card>
   );
 }
@@ -331,17 +292,15 @@ function ReadyCard({
       <Card level={2}>
         <Kicker>{RISK_HORIZON_KICKER}</Kicker>
 
-        {/* Points, not a percentage — the number is a tally, and writing it
-            with a % sign would invite reading it as a probability. */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm }}>
-          <Txt variant="hero" style={{ color: style.text, fontSize: 76, lineHeight: 84, letterSpacing: -2 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+          <Txt variant="hero" style={{ color: style.text, fontSize: 72, lineHeight: 84 }}>
             {points}
           </Txt>
-          <Txt variant="heading" tone="faint">
+          <Txt variant="heading" tone="faint" style={{ marginTop: spacing.md }}>
             / 100
           </Txt>
           <View style={{ flex: 1 }} />
-          <Pill label={style.label} color={style.text} background={style.soft} />
+          <Pill label={style.label} color={style.text} background={style.soft} style={{ alignSelf: 'center' }} />
         </View>
 
         <View
@@ -349,7 +308,7 @@ function ReadyCard({
             flexDirection: 'row',
             alignItems: 'center',
             gap: 4,
-            marginTop: spacing.md,
+            marginTop: spacing.sm,
             paddingTop: spacing.md,
             borderTopWidth: 1,
             borderTopColor: palette.border,
@@ -398,7 +357,7 @@ function AiCard({
         <Card tone="alt" level={1} style={{ marginTop: spacing.md }}>
           <Kicker>AI second opinion</Kicker>
           <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 21 }}>
-            Unavailable right now. Your score above is unaffected — it is worked
+            Not available right now. Your score above still works because it is worked
             out on this phone. Tap to try again.
           </Txt>
         </Card>
@@ -431,10 +390,10 @@ function AiCard({
 
       <Txt tone="muted" style={{ marginTop: spacing.md, lineHeight: 21 }}>
         {agrees
-          ? `Fleur's own rules agree — both read ${bandStyle(localBand, palette).label.toLowerCase()}.`
-          : `Fleur's own rules read ${bandStyle(localBand, palette).label.toLowerCase()}, ${
+          ? `Fleur's rules agree. Both say ${bandStyle(localBand, palette).label.toLowerCase()}.`
+          : `Fleur's rules say ${bandStyle(localBand, palette).label.toLowerCase()}, which is ${
               drift > 0 ? 'lower' : 'higher'
-            } than the AI. When they disagree, the rules are the number Fleur stands behind — they can be checked by hand.`}
+            } than the AI. If they don't match, go with Fleur's rules, since you can check them by hand.`}
       </Txt>
 
       {opinion.summary ? (
@@ -449,25 +408,7 @@ function AiCard({
 function NoRiskYetPill({ label }: { label: string }): React.ReactElement {
   const { palette } = useTheme();
   return (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        alignSelf: 'flex-start',
-        marginTop: spacing.md,
-        paddingHorizontal: spacing.md,
-        paddingVertical: 5,
-        borderRadius: 999,
-        borderWidth: 1,
-        borderColor: palette.primary,
-      }}
-    >
-      <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: palette.primary }} />
-      <Txt variant="micro" tone="accent">
-        {label}
-      </Txt>
-    </View>
+    <Pill label={label} color={palette.primary} background={palette.primarySoft} style={{ marginTop: spacing.md }} />
   );
 }
 
@@ -488,9 +429,8 @@ function CollectingCard({
     <Card level={2} style={{ paddingTop: spacing.xl }}>
       <Kicker>Collecting data</Kicker>
 
-      {/* Flat count — no ring. */}
       <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, marginTop: spacing.md }}>
-        <Txt variant="hero" tone="accent">
+        <Txt variant="hero" tone="accent" style={{ fontSize: 64, lineHeight: 76 }}>
           {days}
         </Txt>
         <Txt variant="heading" tone="faint">
@@ -499,12 +439,11 @@ function CollectingCard({
       </View>
 
       <Txt tone="muted" style={{ marginTop: spacing.md, lineHeight: 22, maxWidth: 320 }}>
-        Fleur needs {required} distinct days before it shows a risk number. Lagged features
-        cannot be computed from a shorter window, and a forecast built on less would be noise
-        dressed up as insight.
+        Fleur needs {required} days of check-ins before it can show a score. Some rules look back
+        up to two weeks, so it needs that much data first.
       </Txt>
 
-      <NoRiskYetPill label="NO RISK VALUE SHOWN YET" />
+      <NoRiskYetPill label="No score yet" />
 
       {ribbon.length > 0 ? (
         <View style={{ width: '100%', marginTop: spacing.lg }}>
@@ -521,7 +460,7 @@ function CollectingCard({
       </View>
 
       <Txt variant="caption" tone="faint" center style={{ marginTop: spacing.md }}>
-        Already working: your check-ins, cached weather, and the trigger reference.
+        Your check-ins are saved as you go.
       </Txt>
     </Card>
   );
@@ -536,13 +475,13 @@ function SparseCard({
 }): React.ReactElement {
   return (
     <Card level={2}>
-      <Kicker>Forecasting paused</Kicker>
+      <Kicker>Not enough recent data</Kicker>
       <Txt variant="heading" style={{ marginTop: spacing.sm }}>
-        Log a few more days to resume forecasting
+        Log a few more days to get your score back
       </Txt>
       <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 22 }}>
-        Above 40% of the last two weeks missing, too many rules have nothing to look at —
-        Fleur would be scoring from gaps, not from you.
+        More than 40% of the last two weeks is missing, so there isn't enough data for a score
+        right now.
       </Txt>
       {ribbon.length > 0 ? (
         <View style={{ marginTop: spacing.lg }}>
@@ -558,10 +497,6 @@ function SparseCard({
     </Card>
   );
 }
-
-// --------------------------------------------------------------------------
-// Secondary cards
-// --------------------------------------------------------------------------
 
 function CheckInCard({
   logged,
@@ -595,32 +530,35 @@ function CheckInCard({
 
   return (
     <PressableScale onPress={onPress} scaleTo={0.99} accessibilityLabel="Log today's check-in">
-      <Card style={{ marginTop: spacing.md, borderColor: palette.primary, borderWidth: 1 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-          <IconBadge background={palette.primarySoft}>
-            <PlusIcon size={20} color={palette.primary} />
+      <View style={{ marginTop: spacing.md }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.md,
+            borderRadius: radius.xl,
+            backgroundColor: palette.primary,
+            padding: spacing.lg,
+          }}
+        >
+          <IconBadge background="rgba(255,255,255,0.18)">
+            <PlusIcon size={20} color={palette.onAccent} />
           </IconBadge>
           <View style={{ flex: 1 }}>
-            <Txt variant="heading">Log today's check-in</Txt>
-            <Txt variant="caption" tone="faint" style={{ marginTop: 1 }}>
-              9 quick questions · about 30 seconds
+            <Txt variant="heading" tone="onAccent">
+              Log today's check-in
+            </Txt>
+            <Txt variant="caption" style={{ marginTop: 1, color: 'rgba(255,255,255,0.86)' }}>
+              9 quick questions, about 30 seconds
             </Txt>
           </View>
-          <ChevronRight size={18} color={palette.primary} />
+          <ChevronRight size={18} color={palette.onAccent} />
         </View>
-      </Card>
+      </View>
     </PressableScale>
   );
 }
 
-/**
- * Today's conditions, straight from the cached Open-Meteo rows.
- *
- * SPEC-DEVIATION: §11.2's "Contains" list does not mention this. It earns its
- * place — these are the exact environmental inputs the weather rules read, so
- * showing them makes the forecast legible instead of opaque, and justifies the
- * location permission the app asked for. Kept visually secondary.
- */
 function ConditionsStrip({
   conditions,
   palette,
@@ -633,7 +571,7 @@ function ConditionsStrip({
   if (conditions.tempMeanC !== null) {
     items.push({
       key: 'temp',
-      icon: <ThermometerIcon size={18} color={palette.primary} />,
+      icon: <ThermometerIcon size={20} color={palette.primary} />,
       value: `${Math.round((conditions.tempMeanC * 9) / 5 + 32)}°F`,
       label: 'Temp',
     });
@@ -641,7 +579,7 @@ function ConditionsStrip({
   if (conditions.humidityMeanPct !== null) {
     items.push({
       key: 'humidity',
-      icon: <DropletIcon size={18} color={palette.aqua} />,
+      icon: <DropletIcon size={20} color={palette.tints.sky.ink} />,
       value: `${Math.round(conditions.humidityMeanPct)}%`,
       label: 'Humidity',
     });
@@ -649,7 +587,7 @@ function ConditionsStrip({
   if (conditions.uvIndexMax !== null) {
     items.push({
       key: 'uv',
-      icon: <SunIcon size={18} color={palette.bandElevatedFill} />,
+      icon: <SunIcon size={20} color={palette.tints.butter.ink} />,
       value: conditions.uvIndexMax.toFixed(1),
       label: 'UV',
     });
@@ -657,7 +595,7 @@ function ConditionsStrip({
   if (conditions.pm25 !== null) {
     items.push({
       key: 'pm',
-      icon: <HazeIcon size={18} color={palette.textMuted} />,
+      icon: <HazeIcon size={20} color={palette.textMuted} />,
       value: Math.round(conditions.pm25).toString(),
       label: 'PM2.5',
     });
@@ -665,7 +603,7 @@ function ConditionsStrip({
   if (conditions.pollenTotal !== null) {
     items.push({
       key: 'pollen',
-      icon: <LeafIcon size={18} color={palette.bandLowFill} />,
+      icon: <LeafIcon size={20} color={palette.tints.sage.ink} />,
       value: Math.round(conditions.pollenTotal).toString(),
       label: 'Pollen',
     });
@@ -676,14 +614,16 @@ function ConditionsStrip({
   return (
     <Card style={{ marginTop: spacing.md }} tone="alt" level={1}>
       <Txt variant="caption" tone="faint" style={{ marginBottom: spacing.md }}>
-        Conditions where you are — the same readings your score uses
+        Weather where you are (used in your score)
       </Txt>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         {items.map((item) => (
           <View key={item.key} style={{ alignItems: 'center', gap: 4, flex: 1 }}>
             {item.icon}
-            <Txt variant="label">{item.value}</Txt>
-            <Txt variant="caption" tone="faint" style={{ fontSize: 11 }}>
+            <Txt variant="heading" style={{ fontSize: 17 }}>
+              {item.value}
+            </Txt>
+            <Txt variant="caption" tone="faint" style={{ fontSize: 12 }}>
               {item.label}
             </Txt>
           </View>

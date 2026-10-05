@@ -1,7 +1,3 @@
-/**
- * Settings → Export. One button: share every check-in as a CSV file.
- */
-
 import React, { useState } from 'react';
 import { Alert, Share } from 'react-native';
 

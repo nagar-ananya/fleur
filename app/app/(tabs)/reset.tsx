@@ -1,19 +1,13 @@
-/**
- * Reset — four lists of small things to do today: breathing, eating,
- * movement and a skin-care checklist. Each opens its own list or checklist.
- * Not treatment (§2); see `src/constants/reset.ts`.
- */
-
 import { useRouter } from 'expo-router';
 import React from 'react';
 import { View } from 'react-native';
 
 import { BowlIcon, ChevronRight, DropletIcon, PersonMoveIcon, WindIcon } from '../../src/components/icons';
 import { PressableScale, Reveal } from '../../src/components/motion';
-import { Card, IconBadge, Screen, Txt } from '../../src/components/primitives';
+import { Card, IconBadge, Screen, ScreenTitle, Txt } from '../../src/components/primitives';
 import { RESET_CATEGORIES, categoryPath, type ResetCategory } from '../../src/constants/reset';
 import { useTheme } from '../../src/hooks/useTheme';
-import { spacing } from '../../src/theme';
+import { spacing, type Palette, type Tint } from '../../src/theme';
 
 const CATEGORY_ICON: Record<
   ResetCategory['icon'],
@@ -25,23 +19,28 @@ const CATEGORY_ICON: Record<
   drop: DropletIcon,
 };
 
+const CATEGORY_TINT: Record<ResetCategory['icon'], (palette: Palette) => Tint> = {
+  wind: (palette) => palette.tints.sage,
+  bowl: (palette) => palette.tints.butter,
+  move: (palette) => palette.tints.lilac,
+  drop: (palette) => palette.tints.sky,
+};
+
 export default function ResetScreen(): React.ReactElement {
   const { palette } = useTheme();
   const router = useRouter();
 
   return (
-    <Screen contentStyle={{ paddingBottom: 120 }}>
+    <Screen contentStyle={{ paddingBottom: spacing.xxxl }}>
       <Reveal>
-        <Txt variant="display">Reset</Txt>
-        <Txt tone="muted" style={{ marginTop: spacing.sm }}>
-          Small things you can do today.
-        </Txt>
+        <ScreenTitle title="Reset" subtitle="Small things you can do today." />
       </Reveal>
 
       <Reveal delay={70}>
         <View style={{ marginTop: spacing.xl, gap: spacing.md }}>
           {RESET_CATEGORIES.map((category) => {
             const Icon = CATEGORY_ICON[category.icon];
+            const tint = CATEGORY_TINT[category.icon](palette);
             return (
               <PressableScale
                 key={category.key}
@@ -50,8 +49,8 @@ export default function ResetScreen(): React.ReactElement {
                 scaleTo={0.98}
               >
                 <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingVertical: spacing.xl }}>
-                  <IconBadge background={palette.primarySoft} size={52}>
-                    <Icon size={24} color={palette.primary} />
+                  <IconBadge background={tint.soft} size={56}>
+                    <Icon size={26} color={tint.ink} />
                   </IconBadge>
                   <View style={{ flex: 1 }}>
                     <Txt variant="heading">{category.title}</Txt>

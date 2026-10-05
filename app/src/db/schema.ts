@@ -1,13 +1,5 @@
-/**
- * SQLite schema (REQUIREMENTS §6). Local-only; there is no server.
- *
- * Column names are snake_case here and camelCase in the app; the translation
- * happens in exactly one place, `queries.ts` (§16).
- */
-
 export const DATABASE_NAME = 'fleur.db';
 
-/** Bumped whenever a statement is added to MIGRATIONS. */
 export const SCHEMA_VERSION = 4;
 
 export const TABLE_NAMES = [
@@ -124,10 +116,6 @@ CREATE TABLE IF NOT EXISTS ai_opinion (
   created_at        TEXT NOT NULL
 );`;
 
-/**
- * Ordered, append-only. Index i is applied when the stored schema version is
- * <= i. Never edit an existing entry — add a new one.
- */
 export const MIGRATIONS: readonly string[][] = [
   [
     CREATE_META,
@@ -139,27 +127,18 @@ export const MIGRATIONS: readonly string[][] = [
     'CREATE INDEX IF NOT EXISTS idx_checkin_date ON checkin(date DESC);',
     'CREATE INDEX IF NOT EXISTS idx_prediction_for_date ON prediction(for_date DESC);',
   ],
-  // v2 — the redesign's "areas affected" check-in step and the Reset tab's
-  // journal. Neither is a model input (§8.1's 95 features are unchanged).
   [
     'ALTER TABLE checkin ADD COLUMN areas TEXT;',
     CREATE_JOURNAL_ENTRY,
     'CREATE INDEX IF NOT EXISTS idx_journal_date ON journal_entry(date DESC);',
   ],
-  // v3 — HRV column, ahead of the planned Fitbit/Health Connect integration
-  // (§10.2). Not a model input; HD-1 keeps HEALTH_ENABLED off, so this stays
-  // null until that integration lands.
   ['ALTER TABLE wearable ADD COLUMN hrv REAL;'],
-  // v4 — the points system replaces the trained model. `source` records which
-  // scorer produced a row, and `ai_opinion` caches one AI answer per day so the
-  // optional second opinion costs at most one API call daily.
   [
     "ALTER TABLE prediction ADD COLUMN source TEXT NOT NULL DEFAULT 'local';",
     CREATE_AI_OPINION,
   ],
 ];
 
-/** PRIV-4: "delete all data" drops and recreates everything. */
 export const DROP_ALL = [
   ...TABLE_NAMES.map((name) => `DROP TABLE IF EXISTS ${name};`),
   'DROP TABLE IF EXISTS meta;',

@@ -1,15 +1,3 @@
-/**
- * The daily check-in, one question per rule.
- *
- * Each question names the rule it feeds, so the check-in and the score
- * breakdown share numbering ("Rule 3" means the same thing on both). Rules
- * with no question here — the weather ones — are filled in automatically and
- * shown on the check-in's weather screen.
- *
- * To add a rule that needs the user's input: add it to `assets/rulebook.json`,
- * make sure the check-in field it reads is saved, then add one entry below.
- */
-
 type NumberField = 'severity' | 'itch' | 'stress' | 'sleepHours' | 'alcoholUnits';
 type YesNoField = 'illness' | 'soreThroat' | 'skinInjury' | 'dietProcessed';
 
@@ -17,7 +5,6 @@ export type CheckInQuestion =
   | {
       kind: 'scale';
       rule: string;
-      /** A word or two for lists, e.g. the History day sheet. */
       short: string;
       field: Extract<NumberField, 'severity' | 'itch' | 'stress'>;
       question: string;

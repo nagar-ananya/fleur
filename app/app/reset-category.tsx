@@ -1,8 +1,3 @@
-/**
- * Reset → one list: breathing exercises, recipes or movement timers. Each
- * row opens its player, recipe or timer.
- */
-
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import { View } from 'react-native';
@@ -33,7 +28,7 @@ function itemsFor(key: ResetCategoryKey): Item[] {
       return BREATH_EXERCISES.map((b) => ({
         id: b.id,
         title: b.title,
-        meta: `${b.minutes} min · ${b.meta}`,
+        meta: `${b.minutes} min - ${b.meta}`,
         pathname: '/reset-session',
       }));
     case 'eat':

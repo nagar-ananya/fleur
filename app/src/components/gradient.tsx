@@ -1,16 +1,3 @@
-/**
- * Gradient fills, painted with react-native-svg.
- *
- * `expo-linear-gradient` would be the obvious choice, but it is a native
- * module: adding it invalidates any installed development build until it is
- * recompiled. These do the same job with a library already in the bundle, and
- * keep the dependency budget (§16) for things that earn it.
- *
- * Each component fills its parent absolutely, so the usual shape is a View
- * with `borderRadius` and `overflow: 'hidden'` wrapping one of these plus the
- * real content.
- */
-
 import React, { useId } from 'react';
 import { Animated, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Defs, LinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg';
@@ -18,7 +5,6 @@ import Svg, { Defs, LinearGradient, RadialGradient, Rect, Stop } from 'react-nat
 import { useDrift } from './motion';
 import type { Gradient } from '../theme';
 
-/** A linear gradient behind whatever is rendered on top of it. */
 export function GradientFill({
   gradient,
   angle = 'diagonal',
@@ -51,13 +37,6 @@ export function GradientFill({
   );
 }
 
-/**
- * Two soft colour washes drifting behind a screen header.
- *
- * This is the single biggest reason the app stopped looking like a form: flat
- * backgrounds read as unfinished, and a whole-screen gradient reads as garish.
- * Two low-opacity blobs give depth without ever competing with content.
- */
 export function AuroraBackdrop({
   colors,
   height = 420,
@@ -110,9 +89,6 @@ function Blob({
   return (
     <Svg width="100%" height="100%">
       <Defs>
-        {/* Radial falloff painted onto a full-bleed rect rather than onto an
-            ellipse: an ellipse leaves a visible hard edge where the shape
-            ends, which reads as a smudge on the screen rather than as light. */}
         <RadialGradient id={id} cx={cx} cy={cy} rx={rx} ry={ry} fx={cx} fy={cy}>
           <Stop offset="0" stopColor={color} stopOpacity={opacity} />
           <Stop offset="0.55" stopColor={color} stopOpacity={opacity * 0.45} />
@@ -124,7 +100,6 @@ function Blob({
   );
 }
 
-/** Rounded container that paints a gradient behind its children. */
 export function GradientCard({
   gradient,
   radius,

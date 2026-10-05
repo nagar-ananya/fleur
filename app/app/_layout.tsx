@@ -1,8 +1,3 @@
-/**
- * Root layout. Mounts the app state provider and routes first-run users into
- * onboarding (F1) before anything else can render.
- */
-
 import { Stack, useRouter, useSegments } from 'expo-router';
 import React, { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
@@ -21,8 +16,6 @@ function Gate(): React.ReactElement {
   useEffect(() => {
     if (!ready) return;
     const inOnboarding = segments[0] === 'onboarding';
-    // FR-1.1: the disclaimer must be accepted before the app is usable, and
-    // the profile row is the record that it was.
     if (!profile && !inOnboarding) {
       router.replace('/onboarding');
     } else if (profile && inOnboarding) {
@@ -70,8 +63,6 @@ function Gate(): React.ReactElement {
         />
         <Stack.Screen name="factor-detail" options={{ title: 'Factor' }} />
 
-        {/* Reset — the breathing player is a focused modal (closed with X);
-            everything else is a normal pushed page (back arrow). */}
         <Stack.Screen name="reset-category" options={{ title: 'Reset' }} />
         <Stack.Screen
           name="reset-session"
@@ -81,7 +72,6 @@ function Gate(): React.ReactElement {
         <Stack.Screen name="reset-recipe" options={{ title: 'Recipe' }} />
         <Stack.Screen name="reset-skin-routine" options={{ title: "Today's skin routine" }} />
 
-        {/* Settings sub-pages. */}
         <Stack.Screen name="settings-profile" options={{ title: 'Profile' }} />
         <Stack.Screen name="settings-export" options={{ title: 'Export' }} />
         <Stack.Screen name="settings-ai" options={{ title: 'AI second opinion' }} />

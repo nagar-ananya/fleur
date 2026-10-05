@@ -9,7 +9,7 @@
     "high": 50
   },
   "results": {
-    "_note": "Measured by app/scripts/check-numbers.ts using the app's own engine. Shown on Settings > Scoring only, never as a claim about the user's own risk. Re-run after any change to rules[] or bands.",
+    "_note": "From app/scripts/check-numbers.ts. Re-run it if the rules or bands change.",
     "measured_at": "2026-09-27",
     "panel_seed": 20260729,
     "tested_on_patients": "1201-1500",

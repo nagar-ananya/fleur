@@ -1,13 +1,3 @@
-/**
- * History (REQUIREMENTS §11, FR-6.x).
- *
- * A month calendar of the last three months, each day coloured by skin
- * severity (0-10). Tapping a day opens a sheet with that day's skin severity
- * and flare score side by side — clearly labelled, since they are on
- * different scales — then the check-in answers in rule order. Editing is
- * offered only inside the 7-day back-fill window (FR-6.2).
- */
-
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
@@ -15,7 +5,16 @@ import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { MonthCalendar, SeverityLegend } from '../../src/components/charts';
 import { ArrowLeftIcon, ChevronRight } from '../../src/components/icons';
 import { PressableScale, Reveal } from '../../src/components/motion';
-import { Button, Card, Kicker, Pill, Screen, Txt } from '../../src/components/primitives';
+import {
+  Button,
+  Card,
+  Kicker,
+  NumberCircle,
+  Pill,
+  Screen,
+  ScreenTitle,
+  Txt,
+} from '../../src/components/primitives';
 import { CHECKIN_QUESTIONS, type CheckInQuestion } from '../../src/constants/checkin';
 import { listCheckIns, loadFeatureInputRows } from '../../src/db/queries';
 import { rulebook, useApp } from '../../src/hooks/appState';
@@ -27,10 +26,8 @@ import { bandStyle, radius, severityWord, spacing } from '../../src/theme';
 import type { CheckIn } from '../../src/types/models';
 import { formatLong, isEditableDate, monthLabel, todayLocal } from '../../src/utils/dates';
 
-/** How many months back the calendar goes, this one included. */
 const MONTHS_SHOWN = 3;
 
-/** 'YYYY-MM-01' of the month `offset` months from the one `date` is in. */
 function monthStart(date: string, offset = 0): string {
   const [y, m] = date.split('-').map(Number);
   const dt = new Date(Date.UTC(y, m - 1 + offset, 1));
@@ -55,8 +52,6 @@ export default function HistoryScreen(): React.ReactElement {
       void listCheckIns(db, earliest, today).then((rows) => {
         setCheckIns(new Map(rows.map((row) => [row.date, row])));
       });
-      // Each day's flare score, worked out exactly as Today's is. Days
-      // without two weeks behind them have no score.
       void loadFeatureInputRows(db, today, 31 * MONTHS_SHOWN + MIN_HISTORY_DAYS).then((rows) => {
         const frame = buildDailyFrame(rows);
         const next = new Map<string, number>();
@@ -78,15 +73,13 @@ export default function HistoryScreen(): React.ReactElement {
   const selectedScore = selected ? (scores.get(selected) ?? null) : null;
 
   return (
-    <Screen contentStyle={{ paddingBottom: 120 }}>
+    <Screen contentStyle={{ paddingBottom: spacing.xxxl }}>
       <Reveal>
-        <Kicker>Your record</Kicker>
-        <Txt variant="display" style={{ marginTop: 4 }}>
-          History
-        </Txt>
-        <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 22 }}>
-          How your skin was each day. Tap a day to see more.
-        </Txt>
+        <ScreenTitle
+          kicker="Your record"
+          title="History"
+          subtitle="How your skin was each day. Tap a day to see more."
+        />
       </Reveal>
 
       <Reveal delay={70}>
@@ -140,7 +133,7 @@ export default function HistoryScreen(): React.ReactElement {
           <Pressable
             onPress={(event) => event.stopPropagation()}
             style={{
-              backgroundColor: palette.surface,
+              backgroundColor: palette.background,
               borderTopLeftRadius: radius.xl,
               borderTopRightRadius: radius.xl,
               paddingTop: spacing.md,
@@ -158,7 +151,7 @@ export default function HistoryScreen(): React.ReactElement {
             />
             {selected ? (
               <ScrollView contentContainerStyle={{ padding: spacing.xl }}>
-                <Txt variant="heading">{formatLong(selected)}</Txt>
+                <Txt variant="title">{formatLong(selected)}</Txt>
 
                 {selectedCheckIn ? (
                   <>
@@ -191,7 +184,6 @@ export default function HistoryScreen(): React.ReactElement {
                   </Txt>
                 )}
 
-                {/* FR-6.2: editing only inside the back-fill window. */}
                 {isEditableDate(selected, today) ? (
                   <Button
                     label={selectedCheckIn ? 'Edit this day' : 'Log this day'}
@@ -250,7 +242,6 @@ function MonthArrow({
   );
 }
 
-/** One of the two headline numbers in the day sheet. */
 function DayNumber({
   title,
   value,
@@ -267,7 +258,14 @@ function DayNumber({
   const { palette } = useTheme();
   const style = band ? bandStyle(band, palette) : null;
   return (
-    <View style={{ flex: 1, backgroundColor: palette.surfaceAlt, borderRadius: radius.md, padding: spacing.md }}>
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: palette.surface,
+        borderRadius: radius.md,
+        padding: spacing.md,
+      }}
+    >
       <Kicker>{title}</Kicker>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4, marginTop: spacing.xs }}>
         <Txt variant="display" style={style ? { color: style.text } : undefined}>
@@ -310,9 +308,7 @@ function Answer({ question, checkIn }: { question: CheckInQuestion; checkIn: Che
         borderBottomColor: palette.border,
       }}
     >
-      <Txt variant="caption" tone="faint" style={{ width: 52 }}>
-        {`Rule ${ruleNumber(question.rule)}`}
-      </Txt>
+      <NumberCircle value={ruleNumber(question.rule)} size={26} />
       <Txt style={{ flex: 1 }}>{question.short}</Txt>
       <Txt variant="label">{value}</Txt>
     </View>

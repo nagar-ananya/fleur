@@ -1,16 +1,10 @@
-/**
- * Reset → Movement → a timer. Starts as soon as it opens, keeps the screen
- * on while it runs, and rings (chime + vibration) until stopped when time is
- * up. What to do while it runs is listed underneath.
- */
-
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
 import { Reveal } from '../src/components/motion';
-import { Button, Card, Kicker, Screen, Txt } from '../src/components/primitives';
+import { Button, Card, Kicker, NumberCircle, Screen, Txt } from '../src/components/primitives';
 import { MOVE_TIMERS } from '../src/constants/reset';
 import { useAlarm } from '../src/hooks/useAlarm';
 import { formatClock, useCountdown } from '../src/hooks/useCountdown';
@@ -33,7 +27,6 @@ export default function MovementTimerScreen(): React.ReactElement {
       alarm.ring();
       setRinging(true);
     }
-    // Ring once per finish, not on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clock.done]);
 
@@ -117,10 +110,11 @@ export default function MovementTimerScreen(): React.ReactElement {
         <Card style={{ marginTop: spacing.xl }}>
           <Kicker style={{ marginBottom: spacing.sm }}>What to do</Kicker>
           {timer.steps.map((step, i) => (
-            <View key={step} style={{ flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.sm }}>
-              <Txt tone="accent" style={{ width: 18, fontWeight: '700' }}>
-                {i + 1}
-              </Txt>
+            <View
+              key={step}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xs }}
+            >
+              <NumberCircle value={i + 1} size={26} />
               <Txt style={{ flex: 1 }}>{step}</Txt>
             </View>
           ))}

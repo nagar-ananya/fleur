@@ -1,12 +1,3 @@
-/**
- * Application state: React Context + hooks, per §5.1. No Redux, no Zustand.
- *
- * Owns the database handle, the profile, the current risk, and the environment
- * refresh cycle. Scoring is synchronous and cheap (§11.2), so risk is recomputed
- * eagerly on app open, on check-in save, and after a successful fetch (FR-4.3)
- * rather than being memoised behind an effect.
- */
-
 import * as SQLite from 'expo-sqlite';
 import React, {
   createContext,
@@ -17,7 +8,6 @@ import React, {
   useRef,
   useState,
 } from 'react';
-
 
 import { getApiKey, forgetApiKey } from '../ai/keyStore';
 import { buildPayload } from '../ai/payload';
@@ -39,7 +29,6 @@ export type { RiskState } from '../logic/risk';
 
 export type EnvironmentStatus = 'idle' | 'fetching' | 'ok' | 'unavailable';
 
-/** §17.1. `local` is the default and sends nothing anywhere. */
 export type AnalysisMode = 'local' | 'local_plus_ai';
 export type AiStatus = 'off' | 'loading' | 'ok' | 'unavailable';
 
@@ -68,9 +57,9 @@ interface AppState {
 
 const AppContext = createContext<AppState | null>(null);
 
+// Holds the database, profile and current score for the whole app.
 export function AppProvider({ children }: { children: React.ReactNode }): React.ReactElement {
   const dbRef = useRef<SQLite.SQLiteDatabase | null>(null);
-  /** Guards against overlapping environment refreshes; see refreshEnvironment. */
   const fetchInFlight = useRef(false);
   const [ready, setReady] = useState(false);
   const [profile, setProfileState] = useState<Profile | null>(null);
@@ -81,20 +70,13 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
   const [analysisMode, setAnalysisModeState] = useState<AnalysisMode>('local');
   const [aiOpinion, setAiOpinion] = useState<StoredAiOpinion | null>(null);
   const [aiStatus, setAiStatus] = useState<AiStatus>('off');
-  /** Stops two Today mounts firing the same paid call. */
   const aiInFlight = useRef(false);
   const today = todayLocal();
 
-  /** FR-4.1/FR-4.3: recompute entirely on-device, no network involved. */
   const recompute = useCallback(async (): Promise<void> => {
     const db = dbRef.current;
     if (!db) return;
 
-    // A thrown error anywhere in here used to be swallowed silently by the
-    // `void refresh()` callers below, which left `risk` on its last good
-    // value forever — indistinguishable from "the score isn't updating".
-    // Logging loudly here means that failure mode is now visible in Metro /
-    // adb logcat instead of looking like a scoring bug.
     try {
       const rows = await loadFeatureInputRows(db, todayLocal());
       setCheckinDays(checkinDayCount(buildDailyFrame(rows)));
@@ -104,9 +86,6 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       const next = deriveRiskState(rows, rulebook);
       setRisk(next);
 
-      // §6.5: append-only log so predictions can be evaluated later. Best
-      // effort — a failure here must not undo the `setRisk` above, since the
-      // number on screen is already correct at this point.
       if (next.status === 'ready') {
         try {
           await insertPrediction(db, {
@@ -123,15 +102,10 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
         }
       }
     } catch (error) {
-      console.error('[fleur] recompute failed — the shown risk value is now stale', error);
+      console.error('[fleur] recompute failed, the score on screen may be out of date', error);
     }
   }, []);
 
-  /**
-   * Asks the AI, at most once a day, and only when the user has opted in.
-   * Every failure path lands on 'unavailable' — the Today screen already has a
-   * real score by the time this runs, so nothing here is worth an error state.
-   */
   const refreshAiOpinion = useCallback(
     async (force = false): Promise<void> => {
       const db = dbRef.current;
@@ -252,8 +226,6 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     };
   }, [recompute]);
 
-  // Deliberately its own effect, after `ready`: a slow or failed network call
-  // must not hold up the local score, which is the number actually on screen.
   useEffect(() => {
     if (!ready || analysisMode !== 'local_plus_ai') return;
     void refreshAiOpinion();
@@ -264,8 +236,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
       const db = dbRef.current;
       if (!db) return;
       await saveCheckInRow(db, checkIn);
-      await recompute(); // FR-4.3
-      // Today's numbers moved, so a cached AI answer for today is stale.
+      await recompute();
       if (checkIn.date === todayLocal() && analysisMode === 'local_plus_ai') {
         await refreshAiOpinion(true);
       }
@@ -277,21 +248,11 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     setProfileState(next);
   }, []);
 
-  /**
-   * FR-3.1 / API-3. Returns whether fresh data landed. A failure here is
-   * non-blocking by design (FR-3.3) — the caller shows an indicator and the
-   * cached rows keep working offline.
-   */
   const refreshEnvironment = useCallback(
     async (coordinates: Coordinates, force = false): Promise<boolean> => {
       const db = dbRef.current;
       if (!db) return false;
 
-      // The stored-timestamp rate limit (API-3) cannot catch overlapping
-      // callers: on a first launch there is no `fetched_at` yet, so two
-      // concurrent refreshes both pass it and then collide in SQLite. The
-      // Today screen reliably triggers exactly that, because its effect re-runs
-      // when `profile` arrives while the first fetch is still in flight.
       if (fetchInFlight.current) return false;
 
       const lastFetch = await getLastEnvironmentFetch(db);
@@ -308,7 +269,7 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
         }
         await upsertEnvironment(db, days);
         setEnvironmentStatus('ok');
-        await recompute(); // FR-4.3
+        await recompute();
         return true;
       } catch (error) {
         console.warn('[fleur] environment refresh failed', error);
@@ -321,7 +282,6 @@ export function AppProvider({ children }: { children: React.ReactNode }): React.
     [recompute],
   );
 
-  /** FR-7.2 / PRIV-4 */
   const deleteAllData = useCallback(async (): Promise<void> => {
     const db = dbRef.current;
     if (!db) return;

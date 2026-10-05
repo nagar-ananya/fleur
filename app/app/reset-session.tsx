@@ -1,9 +1,3 @@
-/**
- * Reset → Breathing → one exercise. A full-screen player (closed with X):
- * the breathing ring paces each breath, a countdown shows time left, and a
- * single chime marks the end.
- */
-
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import React, { useEffect } from 'react';
@@ -45,7 +39,7 @@ export default function BreathSessionScreen(): React.ReactElement {
             borderRadius: 22,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: palette.surfaceAlt,
+            backgroundColor: palette.surface,
           }}
         >
           <CloseIcon size={18} color={palette.textMuted} />

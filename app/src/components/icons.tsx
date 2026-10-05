@@ -1,11 +1,3 @@
-/**
- * Icon set, hand-drawn on react-native-svg.
- *
- * §11.5 rules out a component library, and an icon font would be one. These
- * are deliberately plain geometric strokes — nothing that reads as an alarm,
- * a warning triangle, or an exclamation mark anywhere near risk.
- */
-
 import React from 'react';
 import Svg, { Circle, Path, Rect, type NumberProp } from 'react-native-svg';
 
@@ -46,13 +38,13 @@ export function TodayIcon({ size, color, strokeWidth }: IconProps): React.ReactE
   );
 }
 
-export function InsightsIcon({ size, color, strokeWidth }: IconProps): React.ReactElement {
+export function RulesIcon({ size, color, strokeWidth }: IconProps): React.ReactElement {
   return (
     <Icon size={size}>
-      <Path d="M4.5 18.5v-4.2" {...stroke(color, strokeWidth)} />
-      <Path d="M9.5 18.5V9" {...stroke(color, strokeWidth)} />
-      <Path d="M14.5 18.5v-6.6" {...stroke(color, strokeWidth)} />
-      <Path d="M19.5 18.5V5.5" {...stroke(color, strokeWidth)} />
+      <Circle cx={5} cy={6.5} r={1.3} fill={color} />
+      <Circle cx={5} cy={12} r={1.3} fill={color} />
+      <Circle cx={5} cy={17.5} r={1.3} fill={color} />
+      <Path d="M9.5 6.5H20M9.5 12H20M9.5 17.5H20" {...stroke(color, strokeWidth)} />
     </Icon>
   );
 }

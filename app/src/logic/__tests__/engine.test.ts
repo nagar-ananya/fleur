@@ -4,7 +4,6 @@ import { rulebook } from '../rulebook';
 
 const DAYS = 20;
 
-/** Dates day 0 .. day 19; index 19 is the day being scored. */
 function dates(): string[] {
   const out: string[] = [];
   for (let i = 0; i < DAYS; i += 1) {
@@ -13,16 +12,10 @@ function dates(): string[] {
   return out;
 }
 
-/**
- * The worked example from docs/rules-engine-design.md §10: skin sat at 3 for a
- * fortnight and is 5 today, stress averaged 7 a week or two back, sleep has
- * averaged 7.2 hours, PM2.5 22, UV 3, nothing else logged.
- */
 function workedExample(): FrameInputRow[] {
   return dates().map((date, i) => ({
     date,
     severity: i === DAYS - 1 ? 5 : 3,
-    // Days 7..14 back from index 19 are indices 5..12.
     stress: i >= 5 && i <= 12 ? 7 : 3,
     sleep_hours: 7.2,
     uv_index_max: 3,
@@ -31,7 +24,7 @@ function workedExample(): FrameInputRow[] {
   }));
 }
 
-describe('scoreDay — the §10 worked example', () => {
+describe('scoreDay worked example', () => {
   const frame = buildDailyFrame(workedExample());
   const result = scoreDay(frame, frame.dates.length - 1, rulebook);
   const points = (id: string): number => result.rules.find((r) => r.id === id)?.points ?? 0;
@@ -42,7 +35,6 @@ describe('scoreDay — the §10 worked example', () => {
   });
 
   it('gives each rule the points the table says', () => {
-    // severity 5 against a 14-day mean of 44/14 = 3.142857 -> delta 1.857143.
     expect(points('skin_climbing')).toBeCloseTo(13.929, 2);
     expect(points('stress')).toBeCloseTo(12.5, 3);
     expect(points('short_sleep')).toBeCloseTo(4.0, 3);
@@ -81,7 +73,6 @@ describe('bands', () => {
   });
 
   it('agrees with the score the engine reports, through the rounding', () => {
-    // Drive the score up by raising today's severity and check the pairing.
     for (const severity of [3, 4, 5, 6, 7, 8, 9, 10]) {
       const rows = workedExample().map((row, i) =>
         i === DAYS - 1 ? { ...row, severity } : row,

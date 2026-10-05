@@ -1,8 +1,4 @@
-# CI.
-#
-# The old blocking parity job is gone: the scoring engine is now written once,
-# in TypeScript, so there are no longer two implementations of one spec that can
-# drift apart. What replaces it is the rulebook-integrity test inside `npm test`.
+# Runs the app checks and the simulator on every push to main.
 
 name: ci
 
@@ -13,7 +9,7 @@ on:
 
 jobs:
   app:
-    name: App — typecheck and tests
+    name: App typecheck and tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,9 +37,7 @@ jobs:
           cache-dependency-path: ml/requirements.txt
       - run: pip install -r requirements.txt
         working-directory: ml
-      # The simulator is no longer part of the product — it generates the
-      # held-out test data the rulebook's numbers were measured on. This proves
-      # it still runs and that SIM-8 determinism holds.
+      # Run it twice with the same seed and make sure the output is the same.
       - name: Simulator smoke test
         working-directory: ml
         run: |
@@ -52,4 +46,4 @@ jobs:
           python simulate.py --seed 1 --patients 10 --offline --quiet
           md5sum data/synthetic_panel.csv > /tmp/second.md5
           diff <(cut -d' ' -f1 /tmp/first.md5) <(cut -d' ' -f1 /tmp/second.md5) \
-            && echo "SIM-8: deterministic"
+            && echo "deterministic"

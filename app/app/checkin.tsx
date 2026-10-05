@@ -1,24 +1,3 @@
-/**
- * Daily check-in — one question per rule (REQUIREMENTS §11.3, FR-2.x).
- *
- * SPEC-DEVIATION: §11.3 asks for "a single vertically scrolling form". This
- * is a step-by-step flow instead, at the product owner's request: one screen
- * per question in `CHECKIN_QUESTIONS`, each tagged with the rule it feeds,
- * then a screen showing the rules the weather fills in, then the new score.
- * Every field still saves as exactly one row (FR-2.1). Fields no rule reads
- * (water, the other food tags, body areas, notes) are no longer asked, but
- * an existing day's values for them are kept untouched on save.
- *
- * Backfilling a past date has its own screen (`/backfill`) — this screen
- * edits either today or, when opened from History's "Edit this day", the
- * `date` param it was given.
- *
- * The final screen's score is a genuine preview: `withDraftCheckIn` splices
- * the draft into the same rows the scorer would see, and `deriveRiskState` —
- * the exact function `AppProvider.recompute` uses — scores it. Nothing is
- * written until Save is pressed.
- */
-
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, ScrollView, View } from 'react-native';
@@ -27,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeftIcon, CloseIcon } from '../src/components/icons';
 import { NumberStepper, ScaleSlider, StepProgress, YesNo } from '../src/components/inputs';
 import { PressableScale, Reveal } from '../src/components/motion';
-import { Button, Card, Kicker, Pill, Txt } from '../src/components/primitives';
+import { Button, Card, NumberCircle, Pill, Txt } from '../src/components/primitives';
 import { CHECKIN_QUESTIONS, type CheckInQuestion } from '../src/constants/checkin';
 import {
   getCheckIn,
@@ -44,12 +23,11 @@ import { bandStyle, radius, spacing } from '../src/theme';
 import { emptyCheckIn, type CheckIn, type EnvironmentDay } from '../src/types/models';
 import { isEditableDate, todayLocal } from '../src/utils/dates';
 
-/** Rules nobody is asked about — filled in from the weather. */
+// The weather rules are filled in automatically, so they are not asked.
 const AUTO_RULES: readonly Rule[] = rulebook.rules.filter(
   (rule) => !CHECKIN_QUESTIONS.some((q) => q.rule === rule.id),
 );
 
-/** Where each weather rule's reading comes from, for the weather screen. */
 const WEATHER_READINGS: Readonly<
   Record<string, { field: keyof EnvironmentDay; format: (v: number) => string }>
 > = {
@@ -96,8 +74,6 @@ export default function CheckInScreen(): React.ReactElement {
       if (existing) {
         setDraft(existing);
       } else {
-        // FR-2.3: carry the sliders forward so most days are a confirmation.
-        // Yes/no answers always start at No — they are about a specific day.
         const previous = await getPreviousCheckIn(db, date);
         if (cancelled) return;
         setDraft({
@@ -138,7 +114,7 @@ export default function CheckInScreen(): React.ReactElement {
   const subtitle = question
     ? `Question ${step + 1} of ${CHECKIN_QUESTIONS.length}`
     : step === WEATHER_STEP
-      ? 'Weather · filled in for you'
+      ? 'Weather (filled in for you)'
       : 'All done';
 
   return (
@@ -156,12 +132,12 @@ export default function CheckInScreen(): React.ReactElement {
           onPress={() => (step > 0 ? setStep(step - 1) : router.back())}
           accessibilityLabel={step > 0 ? 'Back' : 'Close'}
           style={{
-            width: 40,
-            height: 40,
-            borderRadius: 20,
+            width: 44,
+            height: 44,
+            borderRadius: 22,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: palette.surfaceAlt,
+            backgroundColor: palette.surface,
           }}
         >
           {step > 0 ? (
@@ -196,7 +172,6 @@ export default function CheckInScreen(): React.ReactElement {
             sleepFromDevice={sleepFromDevice}
             onChange={(field, value) => {
               update(field, value as never);
-              // A yes/no tap is the whole answer — move on by itself.
               if (question.kind === 'yesno') {
                 if (advanceTimer.current) clearTimeout(advanceTimer.current);
                 advanceTimer.current = setTimeout(next, 250);
@@ -221,25 +196,18 @@ export default function CheckInScreen(): React.ReactElement {
   );
 }
 
-// --------------------------------------------------------------------------
-// One question
-// --------------------------------------------------------------------------
-
-/** "Rule 3 · You were unwell a week or two ago" */
 function RuleTag({ id }: { id: string }): React.ReactElement {
-  const { palette } = useTheme();
   const rule = rulebook.rules.find((r) => r.id === id);
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-      <Pill label={`RULE ${ruleNumber(id)}`} color={palette.primary} background={palette.primarySoft} />
-      <Txt variant="caption" tone="faint" style={{ flex: 1 }} numberOfLines={1}>
+      <NumberCircle value={ruleNumber(id)} size={30} />
+      <Txt variant="caption" tone="muted" style={{ flex: 1 }} numberOfLines={1}>
         {rule?.label ?? ''}
       </Txt>
     </View>
   );
 }
 
-/** For rules that look back, say when today's answer starts to count. */
 function lookbackNote(id: string): string | null {
   const from = rulebook.rules.find((r) => r.id === id)?.look_at.from ?? 0;
   return from > 0 ? `Today's answer counts toward your score in about ${from} days.` : null;
@@ -301,17 +269,13 @@ function QuestionStep({
   );
 }
 
-// --------------------------------------------------------------------------
-// Weather
-// --------------------------------------------------------------------------
-
 function WeatherStep({ conditions }: { conditions: EnvironmentDay | null }): React.ReactElement {
   const { palette } = useTheme();
   return (
     <Reveal>
       <Txt variant="title">{`The weather covers the last ${AUTO_RULES.length} rules`}</Txt>
       <Txt tone="muted" style={{ marginTop: spacing.sm, marginBottom: spacing.xl }}>
-        Nothing to answer here — Fleur looks these up for your area.
+        You don't need to answer these. Fleur gets them from the weather for your area.
       </Txt>
       <View style={{ gap: spacing.sm }}>
         {AUTO_RULES.map((rule) => {
@@ -325,16 +289,12 @@ function WeatherStep({ conditions }: { conditions: EnvironmentDay | null }): Rea
                 flexDirection: 'row',
                 alignItems: 'center',
                 gap: spacing.md,
-                backgroundColor: palette.surfaceAlt,
+                backgroundColor: palette.surface,
                 borderRadius: radius.md,
                 padding: spacing.md,
               }}
             >
-              <Pill
-                label={`RULE ${ruleNumber(rule.id)}`}
-                color={palette.primary}
-                background={palette.primarySoft}
-              />
+              <NumberCircle value={ruleNumber(rule.id)} size={30} />
               <Txt style={{ flex: 1 }}>{rule.label}</Txt>
               <Txt variant="label" tone={typeof raw === 'number' ? 'default' : 'faint'}>
                 {reading}
@@ -346,10 +306,6 @@ function WeatherStep({ conditions }: { conditions: EnvironmentDay | null }): Rea
     </Reveal>
   );
 }
-
-// --------------------------------------------------------------------------
-// New score
-// --------------------------------------------------------------------------
 
 function ReviewStep({
   draft,
@@ -378,8 +334,6 @@ function ReviewStep({
     return () => {
       cancelled = true;
     };
-    // The draft object is recreated on every change; its serialised form is
-    // a cheap, stable dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [db, date, draftSignature]);
 
@@ -422,10 +376,10 @@ function Outlook({ before, after }: { before: RiskState; after: RiskState | null
   return (
     <View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-        <Txt variant="hero" style={{ color: style.text }}>
+        <Txt variant="hero" style={{ color: style.text, fontSize: 64, lineHeight: 78 }}>
           {after.score}
         </Txt>
-        <Pill label={style.label} color={style.text} background={style.soft} />
+        <Pill label={style.label} color={style.text} background={style.soft} style={{ alignSelf: 'center' }} />
       </View>
       <Txt tone="muted" style={{ marginTop: spacing.sm }}>
         {was === null || delta === null

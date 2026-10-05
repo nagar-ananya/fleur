@@ -1,18 +1,4 @@
-"""M1: pull real historical weather + air quality for the simulator (SIM-3).
-
-Planting triggers on top of *real* environmental series is what makes the
-synthetic panel worth anything: temperature, humidity and pressure carry their
-true seasonal structure and cross-correlations instead of independent noise.
-
-Writes `data/weather_cache.json`, keyed by city. The cache is the unit of
-reproducibility — once it exists, `simulate.py` never touches the network.
-
-Usage:
-    python fetch_archive.py                 # fetch (or reuse) the cache
-    python fetch_archive.py --refresh       # force a re-fetch
-    python fetch_archive.py --offline       # synthesise if the API is down
-"""
-
+"""Downloads past weather from Open-Meteo for the simulator."""
 from __future__ import annotations
 
 import argparse
@@ -34,8 +20,6 @@ AIR_QUALITY_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 START_DATE = "2024-01-01"
 END_DATE = "2024-12-31"
 
-# European cities throughout: Open-Meteo's pollen product (CAMS Europe) has no
-# coverage elsewhere, and `pollen_total` is one of the trigger candidates.
 CITIES: list[dict[str, object]] = [
     {"name": "London", "latitude": 51.51, "longitude": -0.13},
     {"name": "Berlin", "latitude": 52.52, "longitude": 13.40},
@@ -47,10 +31,6 @@ CITIES: list[dict[str, object]] = [
     {"name": "Athens", "latitude": 37.98, "longitude": 23.73},
 ]
 
-# Hourly rather than daily aggregates: the archive's daily variable list has
-# changed shape before, whereas these hourly names are long-stable. We do the
-# aggregation ourselves, which also keeps it identical to what the app does to
-# the air-quality feed (§10.1).
 WEATHER_HOURLY = [
     "temperature_2m",
     "relative_humidity_2m",
@@ -82,7 +62,7 @@ def _get(url: str, params: dict[str, object]) -> dict:
             resp = requests.get(url, params=params, timeout=TIMEOUT_S)
             resp.raise_for_status()
             return resp.json()
-        except Exception as exc:  # noqa: BLE001 - retried, then re-raised
+        except Exception as exc:  # noqa: BLE001
             last = exc
             if attempt < RETRIES - 1:
                 time.sleep(2**attempt)
@@ -92,7 +72,6 @@ def _get(url: str, params: dict[str, object]) -> dict:
 def _daily_from_hourly(
     times: list[str], values: dict[str, list[float | None]], how: dict[str, str]
 ) -> dict[str, dict[str, float]]:
-    """Bucket hourly readings into per-date means/maxima/sums."""
     buckets: dict[str, dict[str, list[float]]] = {}
     for i, stamp in enumerate(times):
         day = stamp[:10]
@@ -120,7 +99,6 @@ def _daily_from_hourly(
 
 
 def fetch_city(city: dict[str, object]) -> dict[str, dict[str, float]]:
-    """One city's daily environment series for the full archive window."""
     common = {
         "latitude": city["latitude"],
         "longitude": city["longitude"],
@@ -152,7 +130,6 @@ def fetch_city(city: dict[str, object]) -> dict[str, dict[str, float]]:
     merged: dict[str, dict[str, float]] = {}
     for day, w in sorted(daily_weather.items()):
         a = daily_air.get(day, {})
-        # §10.1: pollen_total sums the available species, missing species as 0.
         pollen = sum(a.get(sp, 0.0) for sp in POLLEN_SPECIES)
         merged[day] = {
             "temp_mean_c": round(w.get("temperature_2m", float("nan")), 3),
@@ -171,12 +148,6 @@ def fetch_city(city: dict[str, object]) -> dict[str, dict[str, float]]:
 
 
 def synthesise_city(city: dict[str, object], seed: int) -> dict[str, dict[str, float]]:
-    """Offline fallback: seasonal series with plausible amplitude and coupling.
-
-    Only used when the archive is unreachable. It keeps the pipeline runnable
-    on a plane; it is not a substitute for SIM-3 and `simulate.py` records
-    which source was used in `ground_truth.json`.
-    """
     rng = np.random.default_rng(seed)
     lat = float(city["latitude"])  # type: ignore[arg-type]
     n_days = 366

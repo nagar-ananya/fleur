@@ -1,216 +1,174 @@
-/**
- * User-facing copy (REQUIREMENTS §13).
- *
- * The disclaimers are quoted verbatim from the spec
- * and must not be paraphrased. Everything else follows §13.1: "risk",
- * "pattern", "association", "may" — never "will", "predicts", "diagnosis",
- * or "prevents", and never a treatment recommendation.
- */
-
-/** §13.2 full form — onboarding (requires acceptance) and Settings. */
 export const DISCLAIMER_FULL =
-  'Fleur is an experimental research prototype, not a medical device. It cannot ' +
-  'diagnose, treat, or prevent any condition, and its predictions have not been ' +
-  'clinically validated. Nothing here is medical advice. Always talk to a ' +
-  'qualified healthcare professional about your psoriasis, and never change your ' +
-  'treatment based on this app.';
+  'Fleur is an experimental project, not a medical device. It can not diagnose or ' +
+  'treat anything, and its scores have not been tested by doctors. This is not ' +
+  'medical advice. Always talk to your doctor about your psoriasis, and do not ' +
+  'change your treatment because of this app.';
 
-/** §13.2 short form — required on every screen showing a risk value (FR-4.6). */
 export const DISCLAIMER_SHORT = 'Experimental. Not medical advice.';
 
-/**
- * How Fleur states the headline number — used on both Today and
- * `/risk-detail` so the two never phrase the same score differently.
- *
- * The horizon is three days (§8.1's target). The 14-day figure is only the
- * minimum *history* required before any score is shown (FR-4.2).
- */
-export const RISK_HORIZON_KICKER = 'Flare risk score · next 3 days';
+export const RISK_HORIZON_KICKER = 'Flare risk score for the next 3 days';
 
 export interface FactorExplanation {
-  /** What the factor is, in plain language. */
   description: string;
-  /** §7.4 documented latency, for the FR-5.4 detail sheet. */
   typicalLag: string;
-  /** Same window as numbers, so the detail sheet can draw it (days). */
   lagFrom: number;
   lagTo: number;
 }
 
-/**
- * Keyed by the base variable each rule names. Lives here rather than in
- * `rulebook.json` because it is UI copy, not part of the scoring contract.
- */
 export const FACTOR_EXPLANATIONS: Readonly<Record<string, FactorExplanation>> = {
   stress: {
     description:
-      'Psychological stress is the most commonly reported psoriasis trigger. The link ' +
-      'runs both ways — flares are stressful too — so treat this as a pattern to notice ' +
-      'rather than a cause to act on.',
-    typicalLag: 'Usually 7 to 14 days between a stressful stretch and a flare.',
+      'Stress is one of the most common psoriasis triggers people report. It can work both ways, since flares are stressful too.',
+    typicalLag: 'Usually 7 to 14 days after a stressful time.',
     lagFrom: 7,
     lagTo: 14,
   },
   sleep_hours: {
     description:
-      'Short or broken sleep is associated with more inflammatory activity. Fleur looks ' +
-      'at both single nights and accumulated debt across the week.',
+      'Not getting enough sleep can make inflammation worse. Fleur looks at your average sleep over the last week.',
     typicalLag: 'Usually 3 to 7 days.',
     lagFrom: 3,
     lagTo: 7,
   },
   itch: {
     description:
-      'Itch often moves together with severity rather than ahead of it, so it tends to ' +
-      'describe a flare more than it forecasts one.',
+      'Itch usually goes up at the same time as your skin gets worse, so it shows a flare more than it predicts one.',
     typicalLag: 'Same day to a few days.',
     lagFrom: 0,
     lagTo: 3,
   },
   alcohol_units: {
     description:
-      'Alcohol intake has been associated with psoriasis severity in observational studies, ' +
-      'more consistently at higher intakes.',
+      'Some studies have linked drinking alcohol with worse psoriasis, mostly at higher amounts.',
     typicalLag: 'Usually 2 to 5 days.',
     lagFrom: 2,
     lagTo: 5,
   },
   diet_dairy: {
     description:
-      'Dairy is among the most commonly *believed* triggers, but the evidence for it is ' +
-      'weak. If it shows up here it is worth testing deliberately before changing anything.',
-    typicalLag: 'Reported anywhere from 3 to 7 days.',
+      'A lot of people think dairy is a trigger, but there is not much proof. Test it on purpose before cutting it out.',
+    typicalLag: 'Anywhere from 3 to 7 days.',
     lagFrom: 3,
     lagTo: 7,
   },
   diet_processed: {
     description:
-      'Highly processed food is associated with systemic inflammation. The effect on ' +
-      'psoriasis specifically is not well established.',
+      'Eating a lot of processed food is linked to inflammation in the body. The link to psoriasis is not proven.',
     typicalLag: 'Usually 3 to 7 days.',
     lagFrom: 3,
     lagTo: 7,
   },
   diet_sugar: {
     description:
-      'High sugar intake is linked to inflammatory markers. As with all diet factors, the ' +
-      'association here is population-level, not personal proof.',
+      'Eating a lot of sugar is linked to inflammation. This is based on studies of many people, not proof for you.',
     typicalLag: 'Usually 3 to 7 days.',
     lagFrom: 3,
     lagTo: 7,
   },
   illness: {
     description:
-      'Infections activate the immune system, which can show up in the skin days later.',
+      'Being sick makes your immune system more active, and that can show up on your skin a while later.',
     typicalLag: 'Usually 10 to 14 days.',
     lagFrom: 10,
     lagTo: 14,
   },
   sore_throat: {
     description:
-      'Streptococcal throat infection is the classic guttate psoriasis trigger and is ' +
-      'tracked separately from general illness for that reason.',
-    typicalLag:
-      'Usually 14 to 21 days. Fleur can only look back 14 days, so the tail of this ' +
-      'window is outside what Fleur can see.',
+      'A strep throat infection is a well known trigger for guttate psoriasis, so Fleur asks about it on its own.',
+    typicalLag: 'Usually 14 to 21 days. Fleur only looks back 14 days, so it can miss the end of this.',
     lagFrom: 14,
     lagTo: 21,
   },
   skin_injury: {
     description:
-      'New lesions appearing at sites of skin trauma is called the Koebner phenomenon — ' +
-      'cuts, scratches, sunburn, and friction all count.',
+      'New spots can show up where the skin was hurt, like a cut, scratch, sunburn or rubbing. This is called the Koebner effect.',
     typicalLag: 'Usually 10 to 14 days.',
     lagFrom: 10,
     lagTo: 14,
   },
   temp_delta_1d: {
     description:
-      'Sharp drops in temperature dry the skin and are associated with worsening, which ' +
-      'is why Fleur tracks the day-to-day change rather than the absolute reading.',
+      'A sudden drop in temperature can dry out your skin and make it worse.',
     typicalLag: 'Usually 1 to 3 days.',
     lagFrom: 1,
     lagTo: 3,
   },
   humidity_delta_1d: {
-    description: 'A sudden fall in humidity pulls moisture from the skin barrier.',
+    description:
+      'A sudden drop in humidity can dry out your skin.',
     typicalLag: 'Usually 1 to 3 days.',
     lagFrom: 1,
     lagTo: 3,
   },
   pressure_delta_1d: {
     description:
-      'Barometric swings are reported anecdotally by some people with inflammatory skin ' +
-      'conditions. The evidence is thin.',
+      'Some people say changes in air pressure affect their skin, but there is not much proof.',
     typicalLag: 'Usually 1 to 3 days.',
     lagFrom: 1,
     lagTo: 3,
   },
   uv_index_max: {
     description:
-      'Natural sunlight is generally protective in psoriasis — phototherapy works on the ' +
-      'same principle — so low-UV stretches often sit alongside worse skin.',
+      'Sunlight usually helps psoriasis, which is why light therapy works. Days with less sun can go along with worse skin.',
     typicalLag: 'Usually 3 to 7 days.',
     lagFrom: 3,
     lagTo: 7,
   },
   pm2_5: {
     description:
-      'Fine particulate air pollution has been associated with psoriasis flares in ' +
-      'several population studies.',
+      'Air pollution has been linked to psoriasis flares in some studies.',
     typicalLag: 'Usually 1 to 4 days.',
     lagFrom: 1,
     lagTo: 4,
   },
   pollen_total: {
-    description: 'Combined pollen load across the species reported for your area.',
+    description:
+      'How much pollen is in the air where you are.',
     typicalLag: 'Usually 1 to 4 days.',
     lagFrom: 1,
     lagTo: 4,
   },
   humidity_mean_pct: {
-    description: 'Sustained low humidity is associated with drier, more irritable skin.',
+    description:
+      'Low humidity for a long time can make skin drier and more irritated.',
     typicalLag: 'Usually 1 to 3 days.',
     lagFrom: 1,
     lagTo: 3,
   },
   severity_baseline: {
     description:
-      'Your average severity over the past two weeks. Fleur measures a flare against this ' +
-      'rather than against a fixed number, so it adapts to where your skin usually sits.',
-    typicalLag: 'Rolling 14-day window.',
+      'Your average skin rating over the last two weeks. Fleur compares each day to this instead of a fixed number.',
+    typicalLag: 'The last 14 days.',
     lagFrom: 0,
     lagTo: 14,
   },
   severity_delta: {
     description:
-      'How far today sits above or below your recent average. This is the single strongest ' +
-      'signal Fleur has — skin that has already started moving tends to keep moving.',
+      'How far today is above or below your recent average. This is the strongest sign Fleur has, because skin that has started getting worse often keeps getting worse.',
     typicalLag: 'Today, compared with the last 14 days.',
     lagFrom: 0,
     lagTo: 1,
   },
   sleep_debt_7d: {
     description:
-      'Hours of sleep missed against 7.5 per night, accumulated over the past week.',
-    typicalLag: 'Rolling 7-day window.',
+      'How many hours of sleep you missed this week, compared to 7.5 hours a night.',
+    typicalLag: 'The last 7 days.',
     lagFrom: 0,
     lagTo: 7,
   },
   temp_mean_c: {
-    description: "Today's average temperature where you are.",
+    description:
+      'The average temperature where you are today.',
     typicalLag: 'Today.',
     lagFrom: 0,
     lagTo: 1,
   },
 };
 
-/** Falls back gracefully rather than showing a raw variable name. */
 export function explanationFor(baseVariable: string): FactorExplanation {
   return (
     FACTOR_EXPLANATIONS[baseVariable] ?? {
-      description:
-        'Fleur watches this factor because published research links it to flares.',
+      description: 'Research has linked this to psoriasis flares.',
       typicalLag: 'Varies.',
       lagFrom: 0,
       lagTo: 14,

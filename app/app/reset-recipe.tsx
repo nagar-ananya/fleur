@@ -1,19 +1,13 @@
-/**
- * Reset → Eat → one recipe: ingredients, then numbered steps.
- */
-
 import { Stack, useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import { View } from 'react-native';
 
 import { Reveal } from '../src/components/motion';
-import { Card, Kicker, Screen, Txt } from '../src/components/primitives';
+import { Card, Kicker, NumberCircle, Screen, Txt } from '../src/components/primitives';
 import { RECIPES } from '../src/constants/reset';
-import { useTheme } from '../src/hooks/useTheme';
 import { spacing } from '../src/theme';
 
 export default function RecipeScreen(): React.ReactElement {
-  const { palette } = useTheme();
   const params = useLocalSearchParams<{ id?: string }>();
   const recipe = RECIPES.find((r) => r.id === params.id) ?? RECIPES[0];
 
@@ -44,20 +38,7 @@ export default function RecipeScreen(): React.ReactElement {
           <Kicker style={{ marginBottom: spacing.sm }}>Steps</Kicker>
           {recipe.steps.map((step, i) => (
             <View key={step} style={{ flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.sm }}>
-              <View
-                style={{
-                  width: 26,
-                  height: 26,
-                  borderRadius: 13,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: palette.primarySoft,
-                }}
-              >
-                <Txt variant="caption" tone="accent" style={{ fontWeight: '700' }}>
-                  {i + 1}
-                </Txt>
-              </View>
+              <NumberCircle value={i + 1} size={26} />
               <Txt style={{ flex: 1, lineHeight: 22 }}>{step}</Txt>
             </View>
           ))}

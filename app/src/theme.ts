@@ -1,20 +1,3 @@
-/**
- * Design system (REQUIREMENTS §11.5).
- *
- * Fleur is a health app about a visible, stigmatised skin condition, so the
- * palette carries a lot of weight. The rules that are not negotiable:
- *
- *   - No red and no alarm palette anywhere near risk. The top band is coral,
- *     labelled "High", never "Warning".
- *  *   - Colour never carries meaning alone; every band pairs with a text label.
- *   - Touch targets are at least 44pt.
- *
- * Within that, the app uses one light "notebook" look: warm paper, dark ink,
- * a single blue accent and flat colours. The dark palette is kept for
- * reference but not used (see `useTheme`). Every text colour below was checked against
- * its intended background for WCAG AA (4.5:1 body, 3:1 large).
- */
-
 import type { RiskBand } from './types/models';
 
 export interface Gradient {
@@ -22,8 +5,12 @@ export interface Gradient {
   readonly to: string;
 }
 
+export interface Tint {
+  readonly ink: string;
+  readonly soft: string;
+}
+
 export interface Palette {
-  // Surfaces, from furthest back to closest.
   background: string;
   surface: string;
   surfaceAlt: string;
@@ -31,21 +18,17 @@ export interface Palette {
   border: string;
   borderStrong: string;
 
-  // Type.
   text: string;
   textMuted: string;
   textFaint: string;
   onAccent: string;
 
-  // Brand.
   primary: string;
   primaryDeep: string;
   primarySoft: string;
   aqua: string;
   aquaSoft: string;
 
-  // Risk bands. `*Text` is contrast-safe on surfaces; `*Fill` is for arcs and
-  // bars where the colour sits on its own.
   bandLowText: string;
   bandLowFill: string;
   bandLowSoft: string;
@@ -57,13 +40,17 @@ export interface Palette {
   bandHighSoft: string;
 
   positive: string;
-  /** Destructive actions only — never risk presentation. */
   destructive: string;
   destructiveSoft: string;
 
-  /** Two soft washes painted behind screen headers. */
+  tints: {
+    sage: Tint;
+    butter: Tint;
+    lilac: Tint;
+    sky: Tint;
+  };
+
   aurora: readonly [string, string];
-  /** Sequential ramp for the severity heatmap, clear → severe. */
   heat: readonly string[];
 
   gradients: {
@@ -78,56 +65,60 @@ export interface Palette {
   shadow: string;
 }
 
-/**
- * "Notebook": warm paper, dark ink, one blue-pen accent. Flat colours — the
- * gradient pairs are deliberately the same colour at both ends.
- */
+// Colors. No red anywhere near the risk score, the top band is orange.
 const light: Palette = {
-  background: '#FAF7F0',
-  surface: '#FFFFFF',
-  surfaceAlt: '#F3EEE3',
-  surfaceSunken: '#ECE6D8',
-  border: '#E6DFD0',
-  borderStrong: '#D3C9B4',
+  background: '#FFFFFF',
+  surface: '#F4F2F6',
+  surfaceAlt: '#EAE6EE',
+  surfaceSunken: '#E0DBE5',
+  border: '#E4E0E8',
+  borderStrong: '#CBC5D1',
 
-  text: '#1F1D1A',
-  textMuted: '#57524A',
-  textFaint: '#716B5F',
+  text: '#1E1A22',
+  textMuted: '#544E5A',
+  textFaint: '#625C68',
   onAccent: '#FFFFFF',
 
-  primary: '#2F5BD3',
-  primaryDeep: '#1F43A8',
-  primarySoft: '#E6EDFC',
-  aqua: '#1F8A70',
-  aquaSoft: '#DDF1EA',
+  primary: '#8E44AD',
+  primaryDeep: '#6C3483',
+  primarySoft: '#F2E7F7',
+  aqua: '#137262',
+  aquaSoft: '#DDF2EC',
 
-  bandLowText: '#1D7A55',
-  bandLowFill: '#3DAA78',
-  bandLowSoft: '#E1F3E9',
-  bandElevatedText: '#8A5B00',
-  bandElevatedFill: '#F0A92E',
-  bandElevatedSoft: '#FCEFD3',
-  bandHighText: '#B34A2E',
-  bandHighFill: '#EC7A55',
-  bandHighSoft: '#FCE5DC',
+  bandLowText: '#1D7447',
+  bandLowFill: '#52B77A',
+  bandLowSoft: '#E2F4E8',
+  bandElevatedText: '#875700',
+  bandElevatedFill: '#F2B33D',
+  bandElevatedSoft: '#FDF0D3',
+  bandHighText: '#AF4527',
+  bandHighFill: '#EE7D57',
+  bandHighSoft: '#FDE4DA',
 
-  positive: '#1D7A55',
-  destructive: '#B23A2A',
-  destructiveSoft: '#FBE3DE',
+  positive: '#1D7447',
+  destructive: '#A8352A',
+  destructiveSoft: '#FBE1DC',
 
-  aurora: ['#FAF7F0', '#FAF7F0'],
-  heat: ['#F1ECE1', '#DCEFE4', '#B5E0C8', '#F5DDA6', '#F1B38E', '#E28A6A'],
-
-  gradients: {
-    primary: { from: '#2F5BD3', to: '#2F5BD3' },
-    hero: { from: '#2F5BD3', to: '#2F5BD3' },
-    low: { from: '#3DAA78', to: '#3DAA78' },
-    elevated: { from: '#F0A92E', to: '#F0A92E' },
-    high: { from: '#EC7A55', to: '#EC7A55' },
-    trend: { from: '#2F5BD3', to: '#2F5BD3' },
+  tints: {
+    sage: { ink: '#22704F', soft: '#E0F2E7' },
+    butter: { ink: '#80590A', soft: '#FCF0CF' },
+    lilac: { ink: '#6A44A8', soft: '#EEE6FA' },
+    sky: { ink: '#22668F', soft: '#E0EEF8' },
   },
 
-  shadow: '#3B2F1E',
+  aurora: ['#FFFFFF', '#FFFFFF'],
+  heat: ['#EEECF0', '#D7F0E0', '#ABDDBE', '#F8DE9C', '#F5B595', '#EA8A6A'],
+
+  gradients: {
+    primary: { from: '#8E44AD', to: '#8E44AD' },
+    hero: { from: '#8E44AD', to: '#8E44AD' },
+    low: { from: '#52B77A', to: '#52B77A' },
+    elevated: { from: '#F2B33D', to: '#F2B33D' },
+    high: { from: '#EE7D57', to: '#EE7D57' },
+    trend: { from: '#8E44AD', to: '#8E44AD' },
+  },
+
+  shadow: '#000000',
 };
 
 const dark: Palette = {
@@ -163,6 +154,13 @@ const dark: Palette = {
   destructive: '#F0917A',
   destructiveSoft: '#331C16',
 
+  tints: {
+    sage: { ink: '#9ED9C0', soft: '#173229' },
+    butter: { ink: '#F2CF7E', soft: '#33280F' },
+    lilac: { ink: '#C9B5F0', soft: '#2A2140' },
+    sky: { ink: '#9CCBEA', soft: '#14293A' },
+  },
+
   aurora: ['#2A1F55', '#123A38'],
   heat: ['#1C1828', '#153733', '#1C5A4E', '#5C4A22', '#87552F', '#B06A46'],
 
@@ -193,55 +191,37 @@ export const spacing = {
 } as const;
 
 export const radius = {
-  sm: 10,
-  md: 14,
-  lg: 20,
-  xl: 28,
+  sm: 6,
+  md: 10,
+  lg: 12,
+  xl: 14,
   pill: 999,
 } as const;
 
-/** §11.5: every interactive target is at least 44x44pt. */
 export const MIN_TOUCH_TARGET = 44;
 
+// Text sizes.
 export const typography = {
-  hero: { fontSize: 52, fontWeight: '700' as const, letterSpacing: -1.4 },
-  display: { fontSize: 38, fontWeight: '700' as const, letterSpacing: -0.9 },
-  title: { fontSize: 27, fontWeight: '700' as const, letterSpacing: -0.5 },
-  heading: { fontSize: 19, fontWeight: '600' as const, letterSpacing: -0.2 },
+  hero: { fontSize: 56, fontWeight: '700' as const },
+  display: { fontSize: 30, fontWeight: '700' as const },
+  title: { fontSize: 23, fontWeight: '700' as const },
+  heading: { fontSize: 18, fontWeight: '600' as const },
   body: { fontSize: 16, fontWeight: '400' as const },
   label: { fontSize: 15, fontWeight: '600' as const },
-  caption: { fontSize: 13.5, fontWeight: '400' as const },
-  micro: { fontSize: 11, fontWeight: '700' as const, letterSpacing: 1.1 },
+  caption: { fontSize: 14, fontWeight: '400' as const },
+  micro: { fontSize: 12, fontWeight: '600' as const },
 } as const;
-
-/** Soft elevation. Kept subtle — this is not a material-design app. */
-export function elevation(palette: Palette, level: 1 | 2 | 3) {
-  const config = {
-    1: { opacity: 0.05, radius: 10, offset: 3 },
-    2: { opacity: 0.08, radius: 20, offset: 8 },
-    3: { opacity: 0.12, radius: 32, offset: 14 },
-  }[level];
-  return {
-    shadowColor: palette.shadow,
-    shadowOpacity: config.opacity,
-    shadowRadius: config.radius,
-    shadowOffset: { width: 0, height: config.offset },
-    elevation: level * 3,
-  };
-}
 
 export interface BandStyle {
   label: string;
-  /** Contrast-safe on surfaces. */
   text: string;
-  /** For arcs, bars and dots. */
   fill: string;
   soft: string;
   gradient: Gradient;
-  /** Plain language. No "warning", no "will", no exclamation mark (§13.1). */
   blurb: string;
 }
 
+// Color and label for each risk band.
 export function bandStyle(band: RiskBand, palette: Palette): BandStyle {
   switch (band) {
     case 'high':
@@ -276,17 +256,12 @@ export function bandStyle(band: RiskBand, palette: Palette): BandStyle {
   }
 }
 
-/**
- * Colour ramp for the user's own 0-10 severity rating. Sequential and calm —
- * it tops out at coral, never red, so the check-in never feels like an alarm.
- */
 export function severityGradient(value: number, palette: Palette): Gradient {
   if (value <= 3) return palette.gradients.low;
   if (value <= 6) return palette.gradients.elevated;
   return palette.gradients.high;
 }
 
-/** Plain-language gloss on a 0-10 self-rating. Not a clinical claim. */
 export function severityWord(value: number): string {
   if (value === 0) return 'Clear';
   if (value <= 2) return 'Very mild';

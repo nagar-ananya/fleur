@@ -1,4 +1,3 @@
-/** Jest for the Expo app. The parity test (§15.1) runs here and blocks merge. */
 module.exports = {
   preset: 'jest-expo',
   transformIgnorePatterns: [

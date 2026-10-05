@@ -1,12 +1,3 @@
-/**
- * What has actually been driving *your* score — the Insights chart.
- *
- * Average points per rule across every day we could have scored. One addition
- * and one division, computed from the person's own logged history, which is
- * more than the old coefficient chart could claim: those numbers came from
- * simulated patients.
- */
-
 import { canPredict, MIN_HISTORY_DAYS, type DailyFrame } from './frame';
 import { scoreDay } from './engine';
 import type { Rulebook } from './rulebook';
@@ -16,11 +7,9 @@ export interface RuleAverage {
   readonly label: string;
   readonly variable: string;
   readonly averagePoints: number;
-  /** Days of the person's own history behind that average. */
   readonly days: number;
 }
 
-/** A rule needs to average at least this much to be worth a bar. */
 const MIN_AVERAGE_POINTS = 0.5;
 
 export function ruleAverages(frame: DailyFrame, book: Rulebook): RuleAverage[] {
@@ -51,7 +40,6 @@ export function ruleAverages(frame: DailyFrame, book: Rulebook): RuleAverage[] {
     .sort((a, b) => Math.abs(b.averagePoints) - Math.abs(a.averagePoints));
 }
 
-/** Days of history behind the chart, for the honest caption. */
 export function scoredDayCount(frame: DailyFrame): number {
   let days = 0;
   for (let i = MIN_HISTORY_DAYS; i < frame.dates.length; i += 1) {

@@ -15,12 +15,10 @@ describe('fraction', () => {
   });
 
   it('handles marks that run backwards, for "less is worse"', () => {
-    // Sleep: 8 hours scores nothing, 5 hours scores everything.
     expect(fraction(8, 8, 5)).toBe(0);
     expect(fraction(5, 8, 5)).toBe(1);
     expect(fraction(6.5, 8, 5)).toBeCloseTo(0.5, 10);
     expect(fraction(9, 8, 5)).toBe(0);
-    // Cold snap.
     expect(fraction(-2, -2, -8)).toBe(0);
     expect(fraction(-8, -2, -8)).toBe(1);
     expect(fraction(-5, -2, -8)).toBeCloseTo(0.5, 10);
@@ -33,7 +31,6 @@ describe('fraction', () => {
 });
 
 describe('lookUp', () => {
-  // 0..20, so a value equals its own index and windows are easy to check.
   const columns: Record<string, Series> = {
     n: Array.from({ length: 21 }, (_, i) => i),
     gappy: Array.from({ length: 21 }, (_, i) => (i % 2 === 0 ? i : null)),
@@ -41,7 +38,6 @@ describe('lookUp', () => {
   };
 
   it('reads both ends of the window inclusively', () => {
-    // from 7 to 14 at index 20 means indices 6..13.
     expect(lookUp(columns, { column: 'n', how: 'lowest', from: 7, to: 14 }, 20)).toBe(6);
     expect(lookUp(columns, { column: 'n', how: 'highest', from: 7, to: 14 }, 20)).toBe(13);
   });
@@ -62,7 +58,6 @@ describe('lookUp', () => {
   });
 
   it('skips missing days rather than counting them as zero', () => {
-    // Indices 18,19,20 -> 18, null, 20. Mean of the two present values is 19.
     expect(lookUp(columns, { column: 'gappy', how: 'average', from: 0, to: 2 }, 20)).toBe(19);
     expect(lookUp(columns, { column: 'gappy', how: 'total', from: 0, to: 2 }, 20)).toBe(38);
   });

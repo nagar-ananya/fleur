@@ -1,10 +1,3 @@
-/**
- * Settings → AI second opinion — a preview of the planned TypeSafe
- * integration. Nothing here is wired up: "Connect" only explains that it is
- * coming, the switch stays off, and the result card is a labelled example.
- * The older AI plumbing (`src/ai/*`) is kept but stays switched off.
- */
-
 import React, { useEffect } from 'react';
 import { Alert, Switch, View } from 'react-native';
 
@@ -19,7 +12,6 @@ export default function SettingsAiScreen(): React.ReactElement {
   const { analysisMode, setAnalysisMode } = useApp();
   const example = bandStyle('elevated', palette);
 
-  // Anyone who turned the old AI option on goes back to phone-only.
   useEffect(() => {
     if (analysisMode !== 'local') void setAnalysisMode('local');
   }, [analysisMode, setAnalysisMode]);
@@ -74,8 +66,8 @@ export default function SettingsAiScreen(): React.ReactElement {
 
       <Kicker style={{ marginTop: spacing.xl, marginBottom: spacing.sm }}>What would be shared</Kicker>
       <Txt tone="muted" style={{ lineHeight: 22 }}>
-        Only your last two weeks of check-in numbers — no name, no location. Your score on Today
-        always comes from this phone; the AI opinion would show next to it, never replace it.
+        Only your check-in numbers from the last two weeks. No name and no location. Your score on
+        Today would still come from this phone, and the AI opinion would just show next to it.
       </Txt>
     </Screen>
   );

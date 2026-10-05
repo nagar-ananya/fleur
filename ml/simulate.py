@@ -1,14 +1,4 @@
-"""M1: synthetic patient generator (REQUIREMENTS §8.2).
-
-The methodological point of this file: it plants known triggers with known
-lags, so the trained model can be graded on whether it *recovers* them rather
-than only on held-out accuracy. `data/ground_truth.json` is the answer key.
-
-Usage:
-    python simulate.py --seed 20260729
-    python simulate.py --seed 1 --patients 20 --quiet     # fast smoke run
-"""
-
+"""Makes fake patient data, using real weather, to test the rules."""
 from __future__ import annotations
 
 import argparse
@@ -25,39 +15,12 @@ DATA_DIR = Path(__file__).parent / "data"
 PANEL_PATH = DATA_DIR / "synthetic_panel.csv"
 GROUND_TRUTH_PATH = DATA_DIR / "ground_truth.json"
 
-# SPEC-DEVIATION: SIM-1 says 200 patients; TR-1 hardcodes patients 1-160 train,
-# 161-200 test. Measured directly (holding a fixed 200-patient test block and
-# only growing the training set): AP rises 0.317 -> 0.336 -> 0.386 and VAL-2's
-# baseline_share_of_full falls 1.026 -> 0.988 -> 0.964 as training patients go
-# 160 -> 500 -> 1000, then flattens hard — 1000 -> 2700 patients moves
-# baseline_share only 0.964 -> 0.960. 1500 sits just past that knee: real,
-# reproducible gains (AP 0.327 -> 0.391, recall 0.328 -> 0.349, essentially at
-# the 0.35 target) without paying for patients that measurably stopped
-# helping. `train.py`'s TRAIN_FRACTION keeps the split at 80/20 by patient
-# regardless of N, so TR-1's *method* (split by patient, never by row) is
-# unchanged — only the count is bigger than the spec's literal number.
 N_PATIENTS = 1500
-# 14 days of feature warm-up + 180 scoreable days + 3 days of target lookahead.
 N_DAYS = 197
 WARMUP_DAYS = 14
 
-AR_PHI = 0.6  # SIM-4
+AR_PHI = 0.6
 
-# Relative probability of each LAG_VAR being planted as a trigger. Zeros are
-# deliberate distractors: they vary in the data and are available to the model,
-# but nothing in the generative process ever depends on them. `diet_dairy` and
-# `itch` are the interesting ones — the first is the most commonly *believed*
-# psoriasis trigger, the second is a symptom that travels with severity. A
-# model that ranks either highly is telling us something is wrong.
-#
-# Weights are roughly the share of patients each trigger should end up in.
-# They are deliberately top-heavy rather than spread evenly over the twelve
-# candidates: survey literature puts psychological stress at 40-80% of
-# psoriasis patients and sleep disruption not far behind, while diet and
-# barometric pressure sit in the single digits. Prevalence matters as much as
-# effect size here, because Fleur ships one *population* model (§2 rules out
-# per-user training) — a trigger only two patients in a hundred share cannot
-# earn a shared coefficient no matter how strong it is for them.
 TRIGGER_WEIGHTS: dict[str, float] = {
     "stress": 0.60,
     "sleep_hours": 0.45,
@@ -78,16 +41,15 @@ TRIGGER_WEIGHTS: dict[str, float] = {
     "humidity_mean_pct": 0.0,
 }
 
-# Which tail of a continuous variable is harmful. Binary variables are used as-is.
 TRIGGER_DIRECTION: dict[str, int] = {
     "stress": +1,
-    "sleep_hours": -1,  # too little sleep
+    "sleep_hours": -1,
     "alcohol_units": +1,
     "itch": +1,
-    "temp_delta_1d": -1,  # cold snap
-    "humidity_delta_1d": -1,  # air drying out
+    "temp_delta_1d": -1,
+    "humidity_delta_1d": -1,
     "pressure_delta_1d": -1,
-    "uv_index_max": -1,  # sunlight is protective in psoriasis
+    "uv_index_max": -1,
     "pm2_5": +1,
     "pollen_total": +1,
     "humidity_mean_pct": -1,
@@ -101,68 +63,42 @@ BINARY_VARS = {
     "skin_injury",
 }
 
-EFFECT_MIN, EFFECT_MAX = 0.8, 2.5  # SIM-2
-LAG_MIN, LAG_MAX = 1, 14  # SIM-2
+EFFECT_MIN, EFFECT_MAX = 0.8, 2.5
+LAG_MIN, LAG_MAX = 1, 14
 
-# SPEC-DEVIATION: SIM-2 says "a random lag in 1-14 days". Drawing uniformly
-# over that range makes every trigger's population-level lag coefficient an
-# average over 14 different latencies, which dilutes it to nothing — with a
-# uniform draw, VAL-2 fails outright: removing every lag feature costs no
-# accuracy because the lags never carried any. Instead each variable draws
-# from the latency window §7.4 documents for it. The lags stay random and
-# stay inside 1-14; they are just drawn from the distribution the spec's own
-# literature table describes rather than a flat one.
 TRIGGER_LAG_WINDOW: dict[str, tuple[int, int]] = {
-    # Cold snap / humidity drop: 1-3 days.
     "temp_delta_1d": (1, 3),
     "humidity_delta_1d": (1, 3),
     "pressure_delta_1d": (1, 3),
     "humidity_mean_pct": (1, 3),
-    # Irritant exposure acts fast.
     "pm2_5": (1, 4),
     "pollen_total": (1, 4),
     "alcohol_units": (2, 5),
-    # Sleep deprivation: 3-7 days.
     "sleep_hours": (3, 7),
     "uv_index_max": (3, 7),
     "diet_dairy": (3, 7),
     "diet_processed": (3, 7),
     "diet_sugar": (3, 7),
     "itch": (1, 14),
-    # Psychological stress: 7-14 days.
     "stress": (7, 14),
-    # Koebner phenomenon and post-infectious flares: 10-14 days.
     "illness": (10, 14),
     "skin_injury": (10, 14),
-    # Streptococcal sore throat is really 14-21 days. §7.4 flags the tail
-    # beyond 14 as a known, accepted limitation of the lag set, so the
-    # planted lag is truncated at the longest lag the features can see.
     "sore_throat": (14, 14),
 }
 
-# Tuned so the flare-positive rate lands inside the 6–12% band required by
-# §8.2. Per that section, calibration happens here — never on the §8.1
-# threshold, which defines what a flare *is*.
-# How extreme a continuous variable must get before it provokes, in SDs.
 TRIGGER_THRESHOLD = 1.0
 RESPONSE_DECAY = 0.70
 RESPONSE_GAIN = 0.916
-# Day-to-day severity wobble that no trigger explains.
 SEVERITY_NOISE_SIGMA = 0.55
-# Persistence of the *unexplained* part of severity. SIM-4's phi~0.6 governs
-# self-reported variables (stress, sleep); severity's residual is separate.
-# Left autocorrelated it manufactures momentum with no cause behind it, and
-# the model learns to ride that instead of learning triggers.
 SEVERITY_NOISE_PHI = 0.0
 IDIOPATHIC_RATE = 0.008
-MISSING_FRACTION = 0.15  # SIM-6
+MISSING_FRACTION = 0.15
 MISSING_RUN_MIN, MISSING_RUN_MAX = 1, 4
 
 PSORIASIS_TYPES = ["plaque", "plaque", "plaque", "guttate", "inverse", "pustular"]
 
 
 def _ar1(rng: np.random.Generator, n: int, phi: float, sigma: float) -> np.ndarray:
-    """AR(1) innovation series with zero mean (SIM-4)."""
     out = np.zeros(n)
     for i in range(1, n):
         out[i] = phi * out[i - 1] + rng.normal(0.0, sigma)
@@ -170,7 +106,6 @@ def _ar1(rng: np.random.Generator, n: int, phi: float, sigma: float) -> np.ndarr
 
 
 def _sticky_binary(rng: np.random.Generator, n: int, p: float, stickiness: float) -> np.ndarray:
-    """Bernoulli series with day-to-day persistence (habits are not i.i.d.)."""
     out = np.zeros(n, dtype=int)
     state = int(rng.random() < p)
     for i in range(n):
@@ -185,7 +120,6 @@ def _sticky_binary(rng: np.random.Generator, n: int, p: float, stickiness: float
 def _episodes(
     rng: np.random.Generator, n: int, rate: float, dur_min: int, dur_max: int
 ) -> np.ndarray:
-    """Multi-day events (an illness lasts, it does not blink on for one day)."""
     out = np.zeros(n, dtype=int)
     i = 0
     while i < n:
@@ -206,15 +140,6 @@ def _zscore(x: np.ndarray) -> np.ndarray:
 
 
 def _trigger_signal(var: str, series: np.ndarray) -> np.ndarray:
-    """Map a raw variable onto a non-negative 'how provoking is today' signal.
-
-    Continuous triggers only fire past a threshold. A mildly stressful Tuesday
-    is not a provocation; a genuinely bad fortnight is. Without the threshold
-    the signal is nonzero on roughly half of all days, so triggers exert
-    constant low-level pressure, flares emerge from slow accumulation, and the
-    result is indistinguishable from momentum — which is what the model then
-    learns. Binary variables are already sparse events and pass through as-is.
-    """
     if var in BINARY_VARS:
         return series.astype(float)
     direction = TRIGGER_DIRECTION[var]
@@ -223,13 +148,11 @@ def _trigger_signal(var: str, series: np.ndarray) -> np.ndarray:
 
 
 def _draw_lag(rng: np.random.Generator, variable: str) -> int:
-    """Sample this variable's latency from its documented window (§7.4)."""
     low, high = TRIGGER_LAG_WINDOW.get(variable, (LAG_MIN, LAG_MAX))
     return int(rng.integers(max(low, LAG_MIN), min(high, LAG_MAX) + 1))
 
 
 def _pick_triggers(rng: np.random.Generator) -> list[dict]:
-    """SIM-2: 2–3 hidden triggers, each with its own lag and effect size."""
     names = list(TRIGGER_WEIGHTS)
     weights = np.array([TRIGGER_WEIGHTS[n] for n in names], dtype=float)
     weights = weights / weights.sum()
@@ -254,7 +177,6 @@ def simulate_patient(
     day_of_week = pd.to_datetime(env["date"]).dt.dayofweek.to_numpy()
     weekend = np.isin(day_of_week, [4, 5])
 
-    # ---- self-reported behavioural series, autocorrelated per SIM-4 --------
     stress_mean = rng.uniform(2.8, 6.5)
     stress_c = stress_mean + _ar1(rng, n, AR_PHI, 1.9)
     stress = np.clip(np.round(stress_c), 0, 10)
@@ -277,8 +199,6 @@ def simulate_patient(
     diet_red_meat = _sticky_binary(rng, n, rng.uniform(0.10, 0.45), 0.60)
 
     illness = _episodes(rng, n, 0.011, 3, 6)
-    # Sore throat is tracked separately because it is the classic guttate
-    # trigger: usually part of an illness, occasionally standalone.
     sore_throat = np.zeros(n, dtype=int)
     in_episode = False
     for i in range(n):
@@ -296,7 +216,6 @@ def simulate_patient(
     on_systemic = int(rng.random() < 0.35)
     med_taken = (rng.random(n) < (0.85 if on_systemic else 0.60)).astype(int)
 
-    # ---- environment + its derived deltas ---------------------------------
     env_arrays = {c: env[c].to_numpy(dtype=float) for c in F.ENV_VARS}
     temp_delta = np.concatenate([[np.nan], np.diff(env_arrays["temp_mean_c"])])
     hum_delta = np.concatenate([[np.nan], np.diff(env_arrays["humidity_mean_pct"])])
@@ -319,10 +238,9 @@ def simulate_patient(
         "pm2_5": env_arrays["pm2_5"],
         "pollen_total": env_arrays["pollen_total"],
         "humidity_mean_pct": env_arrays["humidity_mean_pct"],
-        "itch": np.zeros(n),  # symptom, never a cause; weight 0 in the pool
+        "itch": np.zeros(n),
     }
 
-    # ---- plant the triggers ----------------------------------------------
     triggers = _pick_triggers(rng)
     drive = np.zeros(n)
     for trig in triggers:
@@ -332,24 +250,12 @@ def simulate_patient(
         lagged[lag:] = signal[: n - lag]
         drive += trig["effect_size"] * lagged
 
-    # Provocations accumulate and then fade rather than acting on a single
-    # day — a flare that starts does not stop the next morning.
     response = np.zeros(n)
     for i in range(1, n):
         response[i] = RESPONSE_DECAY * response[i - 1] + drive[i]
 
-    # Trigger signals are non-negative by construction (only *high* stress or
-    # *low* sleep provokes), so an uncentred response is a permanent upward
-    # offset rather than an excursion: everyone drifts toward the top of the
-    # scale, severity piles up against the 0-10 ceiling, and `severity_baseline
-    # + 3 > 10` makes a flare arithmetically impossible on a sixth of all days.
-    # That hands the model a shortcut — predict "no flare" whenever the
-    # baseline is high — which is precisely the artefact VAL-2 hunts for.
-    # Centring makes the response mean-zero, so `base_severity` really is the
-    # patient's typical level and a flare is a genuine departure from it.
     response = response - response.mean()
 
-    # SIM-5: idiopathic flares with no assigned cause.
     idio_events = rng.random(n) < IDIOPATHIC_RATE
     idio = np.zeros(n)
     for i in range(n):
@@ -361,11 +267,9 @@ def simulate_patient(
     severity_c = base_severity + noise + RESPONSE_GAIN * response + idio
     severity = np.clip(np.round(severity_c), 0, 10).astype(int)
 
-    # Itch tracks severity with plenty of slop; it carries no independent signal.
     itch_offset = rng.uniform(-1.0, 1.5)
     itch = np.clip(np.round(0.6 * severity + itch_offset + rng.normal(0, 1.5, n)), 0, 10)
 
-    # ---- optional wearable -----------------------------------------------
     has_wearable = rng.random() < 0.40
     if has_wearable:
         device_sleep = np.round(np.clip(sleep_hours + rng.normal(0, 0.35, n), 0, 16) * 100) / 100
@@ -383,7 +287,6 @@ def simulate_patient(
         steps = np.full(n, np.nan)
         source = None
 
-    # ---- SIM-6 missing check-ins, in runs ---------------------------------
     missing = np.zeros(n, dtype=bool)
     target_missing = int(MISSING_FRACTION * n)
     guard = 0
@@ -423,9 +326,6 @@ def simulate_patient(
     for col in F.ENV_VARS:
         frame[col] = env[col].to_numpy(dtype=float)
 
-    # A missing day means the user logged nothing at all — every self-reported
-    # column goes null together. Device columns are untouched: a phone keeps
-    # recording sleep whether or not its owner opens the app.
     self_reported = list(dict.fromkeys(F.SELF_VARS + ["new_product", "med_taken"]))
     frame[self_reported] = frame[self_reported].astype(float)
     frame.loc[missing, self_reported] = np.nan
@@ -442,8 +342,6 @@ def simulate_patient(
         "triggers": triggers,
         "missing_days": int(missing.sum()),
     }
-    # Simulator internals, kept out of the panel so nothing downstream can peek
-    # at them. Used only to audit the SIM-5 idiopathic share.
     diagnostics = {
         "trigger_component": RESPONSE_GAIN * response,
         "idiopathic_component": idio,
@@ -456,8 +354,6 @@ def _city_frames(cache: dict) -> dict[str, pd.DataFrame]:
     for name, days in cache["cities"].items():
         rows = [{"date": d, **vals} for d, vals in sorted(days.items())]
         frame = pd.DataFrame(rows)
-        # A handful of archive days can be short a variable; interpolate rather
-        # than propagating NaN into every patient who lands on that window.
         numeric = [c for c in frame.columns if c != "date"]
         frame[numeric] = frame[numeric].interpolate(limit_direction="both")
         out[name] = frame
@@ -555,12 +451,6 @@ def main() -> None:
 
 
 def _flare_stats(panel: pd.DataFrame, diagnostics: dict[int, dict]) -> tuple[float, float]:
-    """Positive rate over the rows training will see, and the idiopathic share.
-
-    A flare is called idiopathic when, on the day severity actually peaks, the
-    unexplained spike component outweighs everything the planted triggers
-    contributed. SIM-5 wants that to be roughly one flare in five.
-    """
     hits = total = idiopathic = 0
     for pid, group in panel.groupby("patient_id", sort=False):
         base = F.build_base_frame(group)

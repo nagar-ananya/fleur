@@ -1,9 +1,3 @@
-/**
- * A pausable countdown. Time left is worked out from a wall-clock end time
- * rather than by counting ticks, so it stays right even if the app is slow
- * or briefly in the background.
- */
-
 import { useEffect, useState } from 'react';
 
 export interface Countdown {
@@ -58,7 +52,6 @@ export function useCountdown(totalSeconds: number, autoStart = true): Countdown 
   };
 }
 
-/** 125 → "2:05" */
 export function formatClock(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }

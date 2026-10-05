@@ -1,24 +1,14 @@
-/**
- * The only data that ever leaves the phone (§17.3).
- *
- * Fourteen rows of numbers. No name, no dates, no location, no notes, no
- * profile — `day` is a relative offset, and the weather figures carry nothing
- * that says where they came from.
- */
-
 import type { DailyFrame } from '../logic/frame';
 
 export const PAYLOAD_DAYS = 14;
 
 export interface DayRow {
-  /** -13 .. 0, where 0 is today. */
   day: number;
   severity: number | null;
   itch: number | null;
   stress: number | null;
   sleep_hours: number | null;
   alcohol_units: number | null;
-  /** Not a rule. Sent so we can see whether the AI over-reads a popular belief. */
   diet_dairy: number | null;
   diet_processed: number | null;
   diet_sugar: number | null;
@@ -30,7 +20,6 @@ export interface DayRow {
   pm2_5: number | null;
 }
 
-/** Columns to send, and what to call them on the wire. */
 const FIELDS: readonly (readonly [string, string])[] = [
   ['severity', 'severity'],
   ['itch', 'itch'],

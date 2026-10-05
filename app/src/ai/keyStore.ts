@@ -1,12 +1,3 @@
-/**
- * The user's own Anthropic API key, kept in the device keystore.
- *
- * `expo-secure-store` is a native module, so a development build that predates
- * it will not have it linked. Rather than crash the whole app on import, every
- * call degrades to "no key available" and `secureStoreAvailable()` lets the
- * Settings screen say why.
- */
-
 const KEY = 'anthropic_api_key';
 
 type SecureStore = {
@@ -23,7 +14,7 @@ function store(): SecureStore | null {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     cached = require('expo-secure-store') as SecureStore;
   } catch {
-    console.warn('[fleur] expo-secure-store is not linked — rebuild to use the AI second opinion');
+    console.warn('[fleur] expo-secure-store is not linked, rebuild to use the AI second opinion');
     cached = null;
   }
   return cached;
@@ -55,7 +46,6 @@ export async function saveApiKey(key: string): Promise<boolean> {
   }
 }
 
-/** Also called by "delete all data" (PRIV-4). */
 export async function forgetApiKey(): Promise<void> {
   try {
     await store()?.deleteItemAsync(KEY);

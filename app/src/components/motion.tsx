@@ -1,15 +1,3 @@
-/**
- * Motion primitives.
- *
- * All built on React Native's own `Animated`, deliberately: adding Reanimated
- * would mean a native rebuild and another dependency (§16) for effects this
- * small. Everything here runs on the native driver except SVG stroke
- * animation, which cannot.
- *
- * Motion is used to establish hierarchy — content arrives in reading order —
- * never to decorate. Durations stay under 500ms so the app never feels slow.
- */
-
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -20,16 +8,13 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-/** Content settles upward into place, staggered by `delay`. */
 export function Reveal({
   children,
   delay = 0,
-  distance = 14,
   style,
 }: {
   children: React.ReactNode;
   delay?: number;
-  distance?: number;
   style?: StyleProp<ViewStyle>;
 }): React.ReactElement {
   const progress = useRef(new Animated.Value(0)).current;
@@ -37,41 +22,18 @@ export function Reveal({
   useEffect(() => {
     const animation = Animated.timing(progress, {
       toValue: 1,
-      duration: 420,
-      delay,
-      easing: Easing.out(Easing.cubic),
+      duration: 260,
+      delay: delay * 0.6,
+      easing: Easing.out(Easing.quad),
       useNativeDriver: true,
     });
     animation.start();
     return () => animation.stop();
   }, [delay, progress]);
 
-  return (
-    <Animated.View
-      style={[
-        style,
-        {
-          opacity: progress,
-          transform: [
-            {
-              translateY: progress.interpolate({
-                inputRange: [0, 1],
-                outputRange: [distance, 0],
-              }),
-            },
-          ],
-        },
-      ]}
-    >
-      {children}
-    </Animated.View>
-  );
+  return <Animated.View style={[style, { opacity: progress }]}>{children}</Animated.View>;
 }
 
-/**
- * Press feedback that actually feels physical. Cards and buttons dip slightly
- * under the finger and spring back.
- */
 export function PressableScale({
   children,
   onPress,
@@ -100,14 +62,10 @@ export function PressableScale({
       toValue: value,
       useNativeDriver: true,
       speed: 40,
-      bounciness: 6,
+      bounciness: 3,
     }).start();
   };
 
-  // The style lands on the Pressable itself rather than on an inner wrapper.
-  // With a nested view, layout styles such as `flex: 1` applied to the child
-  // do nothing — the Pressable still sizes to its content — so a button in a
-  // row shrank to hug its label instead of filling the space.
   return (
     <AnimatedPressable
       onPress={onPress}
@@ -127,10 +85,6 @@ export function PressableScale({
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-/**
- * Counts a number up on mount. The risk percentage arriving at its value reads
- * as a measurement being taken rather than a verdict being pronounced.
- */
 export function useCountUp(target: number, duration = 900, decimals = 0): string {
   const [display, setDisplay] = useState(0);
   const value = useRef(new Animated.Value(0)).current;
@@ -154,7 +108,6 @@ export function useCountUp(target: number, duration = 900, decimals = 0): string
   return display.toFixed(decimals);
 }
 
-/** A slow, endless drift used behind the aurora washes. */
 export function useDrift(duration = 9000): Animated.Value {
   const drift = useRef(new Animated.Value(0)).current;
 

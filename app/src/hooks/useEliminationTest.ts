@@ -1,17 +1,3 @@
-/**
- * Elimination test — a real, on-device A/B of sorts against your own two
- * weeks: seven days logging a chosen factor as usual, seven days avoiding
- * it, then a plain comparison of average severity across the two halves.
- *
- * Deliberately not a controlled trial — there is no blinding and no control
- * for anything else that changed in those two weeks — and the summary says
- * so. It is "the most honest thing in the app" precisely because it is your
- * own data compared with itself, not a population model's guess.
- *
- * State lives in `meta` under one key; there is at most one test running at
- * a time.
- */
-
 import { useCallback, useEffect, useState } from 'react';
 
 import { getMeta, listCheckIns, setMeta, deleteMeta } from '../db/queries';
@@ -22,7 +8,6 @@ const META_KEY = 'elimination_test';
 export const ELIMINATION_TOTAL_DAYS = 14;
 export const ELIMINATION_PHASE_DAYS = 7;
 
-/** The lifestyle factors a test can target — the only ones a person can choose to avoid. */
 export const ELIMINATION_CANDIDATES: Readonly<Record<string, string>> = {
   alcohol_units: 'Alcohol',
   diet_dairy: 'Dairy',
@@ -86,7 +71,6 @@ export function useEliminationTest(): {
       setLoaded(true);
       return;
     }
-    // Complete: compare the two seven-day halves on real logged severity.
     const week1 = await listCheckIns(db, stored.startDate, addDays(stored.startDate, 6));
     const week2 = await listCheckIns(
       db,

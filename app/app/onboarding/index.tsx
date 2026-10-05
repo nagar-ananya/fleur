@@ -1,18 +1,10 @@
-/**
- * Onboarding (REQUIREMENTS §3 F1, FR-1.x).
- *
- * Three steps, targeted at under 90 seconds (FR-1.5): disclaimer, profile,
- * location. The disclaimer requires an explicit tap (FR-1.1); every permission
- * can be declined and the app still works fully (FR-1.3, FR-1.4).
- */
-
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ScrollView, TextInput, View } from 'react-native';
 
 import { ChoiceRow, StepProgress, ToggleRow } from '../../src/components/inputs';
-import { CheckIcon, PinIcon, ShieldIcon, SparkIcon, WatchIcon } from '../../src/components/icons';
+import { CheckIcon, LeafIcon, PinIcon, ShieldIcon, WatchIcon } from '../../src/components/icons';
 import { Reveal } from '../../src/components/motion';
 import {
   Button,
@@ -105,14 +97,14 @@ export default function OnboardingScreen(): React.ReactElement {
       {step === 'disclaimer' ? (
         <Reveal>
           <IconBadge background={palette.primarySoft} size={54}>
-            <SparkIcon size={26} color={palette.primary} />
+            <LeafIcon size={26} color={palette.primary} />
           </IconBadge>
 
           <Txt variant="hero" style={{ marginTop: spacing.lg }}>
             Fleur
           </Txt>
           <Txt variant="heading" tone="muted" style={{ marginTop: spacing.sm, lineHeight: 26 }}>
-            Existing psoriasis apps are diaries. Fleur is a forecast.
+            Track your psoriasis and see when a flare might be coming.
           </Txt>
 
           <Card tone="alt" style={{ marginTop: spacing.xl }}>
@@ -127,7 +119,6 @@ export default function OnboardingScreen(): React.ReactElement {
             </Txt>
           </Card>
 
-          {/* FR-1.1: an explicit acceptance control, not a passive scroll. */}
           <Button
             label="I understand and accept"
             icon={<CheckIcon size={18} color={palette.onAccent} />}
@@ -204,9 +195,8 @@ export default function OnboardingScreen(): React.ReactElement {
             Local conditions
           </Txt>
           <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 23 }}>
-            Temperature swings, humidity, pollen and air quality are all candidate triggers.
-            Fleur fetches them from a free public weather service using coordinates rounded to
-            about a kilometre. Nothing else is ever sent.
+            Weather and air quality can affect psoriasis. Fleur gets them from a free weather
+            service using your rough location (about 1 km). Nothing else is sent.
           </Txt>
 
           <Button
@@ -223,7 +213,6 @@ export default function OnboardingScreen(): React.ReactElement {
             style={{ marginTop: spacing.xl }}
           />
 
-          {/* FR-1.3: degrade gracefully to a manually entered city. */}
           <Kicker style={{ marginTop: spacing.xl }}>Or enter a city</Kicker>
           <TextInput
             value={cityLabel}
@@ -261,9 +250,8 @@ export default function OnboardingScreen(): React.ReactElement {
             Let Fitbit fill in your sleep?
           </Txt>
           <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 23 }}>
-            Fleur can read Fitbit data through Google Health once that is connected. If you skip
-            this, the sleep slider in the daily check-in covers it — nothing in Fleur is gated
-            behind a wearable.
+            Fleur will be able to read your sleep from Fitbit later. For now you can just enter
+            your sleep in the daily check-in.
           </Txt>
 
           <Card style={{ marginTop: spacing.xl }}>
@@ -272,8 +260,8 @@ export default function OnboardingScreen(): React.ReactElement {
             </Txt>
             <Txt variant="caption" tone="faint" style={{ marginTop: spacing.sm, lineHeight: 18 }}>
               {HEALTH_ENABLED
-                ? 'Read once a day, trailing 14 days. Nothing is ever written back.'
-                : 'Fitbit/Google Health integration is coming soon. Sleep is entered manually on the check-in form until then.'}
+                ? 'Read once a day. Fleur never writes anything to Fitbit.'
+                : 'Fitbit support is coming soon. Until then you enter your sleep in the check-in.'}
             </Txt>
           </Card>
 
@@ -287,9 +275,8 @@ export default function OnboardingScreen(): React.ReactElement {
           >
             <Kicker>What happens next</Kicker>
             <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 21 }}>
-              You land on Today with a progress ring: 0 of 14 days. Fleur will not show a risk
-              number until it has fourteen distinct check-ins — roughly two weeks of about
-              thirty seconds a day.
+              Fleur needs 14 days of check-ins before it can show a score. Each check-in takes
+              about 30 seconds.
             </Txt>
           </Card>
 

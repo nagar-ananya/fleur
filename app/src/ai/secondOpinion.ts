@@ -1,11 +1,3 @@
-/**
- * The optional AI second opinion (§17).
- *
- * Never drives the number on Today — the points system does that. This runs
- * alongside it, and every failure path ends in "unavailable" rather than an
- * error the user has to deal with.
- */
-
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
@@ -27,7 +19,6 @@ export interface Opinion {
   score: number;
   band: RiskBand;
   factorIds: string[];
-  /** Empty when the model's sentence failed the §13.1 word check. */
   summary: string;
 }
 
@@ -55,7 +46,6 @@ Rules you must follow:
   "associated with". Never say anything is a cause.
 - Return only the fields asked for.`;
 
-/** §13.1: no treatment advice, no claim language, ever. */
 const BANNED = [
   'will ',
   'predicts',
@@ -86,9 +76,6 @@ export async function askForSecondOpinion(
   rows: readonly DayRow[],
   apiKey: string,
 ): Promise<Opinion | null> {
-  // React Native looks browser-ish to the SDK's key-exposure guard. The key
-  // here is the user's own and never leaves their device, so the guard is
-  // the wrong call for this one case.
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
 
   const response = await client.messages.parse({

@@ -1,5 +1,3 @@
-/** Trend chart scrubber: touch position → nearest sample. */
-
 import { nearestIndex } from '../charts';
 
 describe('nearestIndex', () => {
@@ -9,7 +7,6 @@ describe('nearestIndex', () => {
   });
 
   it('rounds to the nearest sample rather than flooring', () => {
-    // Seven points over 300px → 50px apart. 70px is nearer point 1 than 2.
     expect(nearestIndex(70, 300, 7)).toBe(1);
     expect(nearestIndex(80, 300, 7)).toBe(2);
   });

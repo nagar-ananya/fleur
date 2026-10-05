@@ -10,7 +10,7 @@ describe('detectEpisodes', () => {
   });
 
   it('requires at least two consecutive days at or above the threshold', () => {
-    expect(detectEpisodes(days([2, 6, 2, 2]))).toEqual([]); // single day
+    expect(detectEpisodes(days([2, 6, 2, 2]))).toEqual([]);
     const result = detectEpisodes(days([2, 6, 7, 2]));
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ from: '2026-01-02', to: '2026-01-03', peak: 7, days: 2 });
@@ -19,7 +19,7 @@ describe('detectEpisodes', () => {
   it('breaks a run at a gap in logging (null), never bridging it', () => {
     const result = detectEpisodes(days([6, 7, null, 8, 9]));
     expect(result).toHaveLength(2);
-    expect(result.map((e) => e.days)).toEqual([2, 2]); // reversed: most recent first
+    expect(result.map((e) => e.days)).toEqual([2, 2]);
   });
 
   it('breaks a run when severity dips below the threshold', () => {

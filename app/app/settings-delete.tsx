@@ -1,9 +1,3 @@
-/**
- * Settings → Delete all data (FR-7.2 / PRIV-4) — split out of the old
- * single-page Settings' modal into a dedicated screen with more room for
- * exactly what gets removed.
- */
-
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { TextInput, View } from 'react-native';
@@ -17,10 +11,10 @@ import { radius, spacing } from '../src/theme';
 const CONFIRM_PHRASE = 'DELETE';
 
 const WIPE_ROWS = [
-  'Every daily check-in and note you have written',
-  'Cached weather and air-quality history',
-  'Every prediction ever computed and its contribution breakdown',
-  'Your profile, disclaimer acceptance and Reset progress',
+  'All your check-ins and notes',
+  'Saved weather and air quality data',
+  'All your past scores',
+  'Your profile and Reset progress',
 ];
 
 export default function SettingsDeleteScreen(): React.ReactElement {
@@ -47,8 +41,8 @@ export default function SettingsDeleteScreen(): React.ReactElement {
   return (
     <Screen contentStyle={{ paddingBottom: 100 }}>
       <Txt tone="muted" style={{ lineHeight: 21 }}>
-        This drops and recreates every table and returns Fleur to onboarding. Because there is
-        no server and no sync, there is nothing to restore from.
+        This deletes everything Fleur has saved on this phone and takes you back to the start.
+        There is no backup, so it can't be undone.
       </Txt>
 
       <View style={{ marginTop: spacing.xl, gap: spacing.sm }}>

@@ -1,9 +1,3 @@
-/**
- * Guards the hand-written rulebook against the mistakes that would break a
- * screen silently: a rule pointing at a column the frame does not build, or a
- * variable with no explanation copy behind it.
- */
-
 import { rulebook } from '../rulebook';
 import { FRAME_COLUMNS } from '../frame';
 import { FACTOR_EXPLANATIONS } from '../../constants/copy';
@@ -58,8 +52,6 @@ describe('rulebook', () => {
   });
 
   it('does not claim a flare frequency anywhere in user-facing copy', () => {
-    // The app shows a band and a points score. It makes no claim about how
-    // often a flare actually follows — see docs/rules-engine-design.md §1.
     const strings = Object.values(copy).filter((v): v is string => typeof v === 'string');
     for (const text of strings) {
       expect(text.toLowerCase()).not.toContain('of 100 days');

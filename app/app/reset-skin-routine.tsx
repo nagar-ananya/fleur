@@ -1,8 +1,3 @@
-/**
- * Reset → Today's skin routine. Morning and evening checklists; ticks are
- * kept for today only (`useDailyChecklist`), so each day starts fresh.
- */
-
 import { Stack } from 'expo-router';
 import React from 'react';
 

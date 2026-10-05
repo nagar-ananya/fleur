@@ -1,32 +1,19 @@
-/**
- * Risk detail — "How your score adds up" (REQUIREMENTS §11.1 `/risk-detail`).
- *
- * Kept deliberately short: the score, where it sits on the band scale, and
- * a plain table of all the rulebook's rules (fixed rulebook order, the same
- * numbers the check-in uses) showing the whole points each one added today
- * out of its maximum. The rounded points add up to the total printed under
- * them (`wholeParts`), so the table can be checked by hand. Rows are not
- * tappable — what each rule means, and its chart, live on the Rules tab.
- */
-
 import { Stack, useRouter } from 'expo-router';
 import React from 'react';
 import { View } from 'react-native';
 
 import { ChevronRight } from '../src/components/icons';
 import { PressableScale, Reveal } from '../src/components/motion';
-import { Card, Kicker, Screen, ShortDisclaimer, Txt } from '../src/components/primitives';
+import { Card, Kicker, NumberCircle, Pill, Screen, ShortDisclaimer, Txt } from '../src/components/primitives';
 import { rulebook, useApp } from '../src/hooks/appState';
 import { useTheme } from '../src/hooks/useTheme';
 import { wholePointsById } from '../src/logic/engine';
-import { bandStyle, radius, spacing } from '../src/theme';
+import { bandStyle, spacing } from '../src/theme';
 
 interface Row {
   id: string;
   label: string;
-  /** Whole points added today, or null when the rule had no data to look at. */
   points: number | null;
-  /** Most the rule can add (negative for rules that take points off). */
   max: number;
 }
 
@@ -51,7 +38,6 @@ export default function RiskDetailScreen(): React.ReactElement {
   const score = risk.score;
 
   const partById = wholePointsById(risk.rules, rulebook);
-  // Fixed rulebook order, so "Rule 3" here is "Rule 3" in the check-in too.
   const rows: Row[] = rulebook.rules.map((rule) => ({
     id: rule.id,
     label: rule.label,
@@ -74,20 +60,7 @@ export default function RiskDetailScreen(): React.ReactElement {
             </Txt>
             <View style={{ flex: 1 }}>
               <Txt variant="label">points today</Txt>
-              <View
-                style={{
-                  alignSelf: 'flex-start',
-                  marginTop: 4,
-                  backgroundColor: style.soft,
-                  borderRadius: radius.pill,
-                  paddingHorizontal: spacing.sm,
-                  paddingVertical: 2,
-                }}
-              >
-                <Txt variant="caption" style={{ color: style.text, fontWeight: '600' }}>
-                  {style.label}
-                </Txt>
-              </View>
+              <Pill label={style.label} color={style.text} background={style.soft} style={{ marginTop: 6 }} />
             </View>
           </View>
 
@@ -155,7 +128,6 @@ export default function RiskDetailScreen(): React.ReactElement {
   );
 }
 
-/** Low / elevated / higher strip with a marker where today's score sits. */
 function BandScale({
   score,
   elevated,
@@ -168,31 +140,55 @@ function BandScale({
   const { palette } = useTheme();
   const at = Math.min(100, Math.max(0, score));
   return (
-    <View style={{ marginTop: spacing.lg }}>
-      <View style={{ height: 14, justifyContent: 'center' }}>
-        <View style={{ flexDirection: 'row', height: 8, borderRadius: 4, overflow: 'hidden' }}>
+    <View style={{ marginTop: spacing.md }}>
+      <View style={{ height: 22, justifyContent: 'center' }}>
+        <View style={{ flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden' }}>
           <View style={{ width: `${elevated}%`, backgroundColor: palette.bandLowFill }} />
           <View style={{ width: `${high - elevated}%`, backgroundColor: palette.bandElevatedFill }} />
           <View style={{ flex: 1, backgroundColor: palette.bandHighFill }} />
         </View>
+        {[elevated, high].map((edge) => (
+          <View
+            key={edge}
+            style={{
+              position: 'absolute',
+              left: `${edge}%`,
+              marginLeft: -2,
+              top: 6,
+              width: 4,
+              height: 10,
+              backgroundColor: palette.surface,
+            }}
+          />
+        ))}
         <View
           style={{
             position: 'absolute',
             left: `${at}%`,
-            marginLeft: -7,
-            width: 14,
-            height: 14,
-            borderRadius: 7,
-            backgroundColor: palette.surface,
+            marginLeft: -9,
+            top: 2,
+            width: 18,
+            height: 18,
+            borderRadius: 9,
+            backgroundColor: palette.background,
             borderWidth: 3,
             borderColor: palette.text,
           }}
         />
       </View>
       <View style={{ flexDirection: 'row', marginTop: spacing.xs }}>
-        <Txt variant="micro" tone="faint" style={{ width: `${elevated}%` }}>LOW</Txt>
-        <Txt variant="micro" tone="faint" style={{ width: `${high - elevated}%` }}>ELEVATED</Txt>
-        <Txt variant="micro" tone="faint" style={{ flex: 1 }}>HIGH</Txt>
+        <Txt variant="caption" style={{ width: `${elevated}%`, color: palette.bandLowText, fontWeight: '600' }}>
+          Low
+        </Txt>
+        <Txt
+          variant="caption"
+          style={{ width: `${high - elevated}%`, color: palette.bandElevatedText, fontWeight: '600' }}
+        >
+          Elevated
+        </Txt>
+        <Txt variant="caption" style={{ flex: 1, color: palette.bandHighText, fontWeight: '600' }}>
+          High
+        </Txt>
       </View>
     </View>
   );
@@ -227,20 +223,12 @@ function RuleRow({ number, row }: { number: number; row: Row }): React.ReactElem
         opacity: active ? 1 : 0.55,
       }}
     >
-      <View
-        style={{
-          width: 28,
-          height: 28,
-          borderRadius: 14,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: palette.surfaceAlt,
-        }}
-      >
-        <Txt variant="caption" tone="muted" style={{ fontWeight: '700' }}>
-          {number}
-        </Txt>
-      </View>
+      <NumberCircle
+        value={number}
+        size={28}
+        color={active ? palette.primary : palette.textFaint}
+        background={active ? palette.primarySoft : palette.surfaceAlt}
+      />
       <Txt style={{ flex: 1, lineHeight: 21 }}>{row.label}</Txt>
       <Txt style={{ minWidth: 72, textAlign: 'right' }}>
         <Txt variant="heading" style={{ color: tint }}>

@@ -1,22 +1,9 @@
-/**
- * Re-measures the numbers in `assets/rulebook.json` against the simulator's
- * held-out patients.
- *
- * This trains nothing. It runs the app's own `scoreDay` over days the app
- * would actually have scored, counts how often a flare really followed, and
- * prints values to paste back into the rulebook. Run it after any change to
- * `rules[]` or `bands`, or the numbers on Settings → Scoring stop being true.
- *
- *   npx tsx scripts/check-numbers.ts ../ml/data/synthetic_panel.csv
- */
-
 import { readFileSync } from 'node:fs';
 
 import { buildDailyFrame, canPredict, MIN_HISTORY_DAYS, type FrameInputRow } from '../src/logic/frame';
 import { scoreDay } from '../src/logic/engine';
 import { rulebook } from '../src/logic/rulebook';
 
-/** The same 300 patients the trained model was tested on. */
 const FIRST_TEST_PATIENT = 1201;
 const FLARE_DELTA = 3;
 const HORIZON_DAYS = 3;
@@ -44,11 +31,6 @@ function parseCsv(path: string): Map<number, FrameInputRow[]> {
   return byPatient;
 }
 
-/**
- * §8.1: did severity rise 3+ above the 14-day baseline within 3 days?
- * Undefined — and so dropped — when any of those days is missing. An
- * unanswered day is not a "no flare" day.
- */
 function labelFor(severity: (number | null)[], baseline: (number | null)[], t: number): 0 | 1 | null {
   const base = baseline[t];
   if (base === null) return null;

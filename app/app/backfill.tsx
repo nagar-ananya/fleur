@@ -1,12 +1,3 @@
-/**
- * Backfill a missed day — split out of the check-in flow in the v2 redesign
- * (REQUIREMENTS FR-2.4: any date in the last 7 days, one entry per date).
- *
- * Sliders start from the trailing week's mean rather than yesterday's value,
- * so a backfilled day cannot quietly inherit a number that was never true
- * for it — the exact reasoning the source design gives for this screen.
- */
-
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
@@ -65,7 +56,6 @@ export default function BackfillScreen(): React.ReactElement {
         stress: withStress.length ? round1(avg(withStress.map((r) => r.stress ?? 0))) : 3,
         sleepHours: withSleep.length ? round1(avg(withSleep.map((r) => r.sleepHours ?? 0))) : 7,
       });
-      // Default to the first empty day in the window, if any.
       const firstEmpty = days.find((d) => d !== today && !rows.some((r) => r.date === d));
       if (firstEmpty) setSelected(firstEmpty);
     });
@@ -107,7 +97,7 @@ export default function BackfillScreen(): React.ReactElement {
       <Reveal>
         <Txt variant="title">Backfill a day</Txt>
         <Txt tone="muted" style={{ marginTop: spacing.xs }}>
-          Any date in the last 7 days · one entry per date
+          You can fill in any day from the last week.
         </Txt>
       </Reveal>
 
@@ -144,7 +134,7 @@ export default function BackfillScreen(): React.ReactElement {
                 {isLogged ? (
                   <CheckIcon size={11} color={palette.bandLowText} strokeWidth={2.6} />
                 ) : (
-                  <Txt variant="caption" tone="faint" style={{ fontSize: 9 }}>
+                  <Txt variant="caption" tone="faint" style={{ fontSize: 10 }}>
                     {isToday ? 'today' : 'empty'}
                   </Txt>
                 )}
@@ -157,13 +147,12 @@ export default function BackfillScreen(): React.ReactElement {
       {draft && selected ? (
         <Reveal delay={110}>
           <Kicker style={{ marginTop: spacing.xl }}>
-            {`${formatShort(selected).toUpperCase()} · ${wasLogged ? 'EDITING' : 'EMPTY'}`}
+            {`${formatShort(selected)} (${wasLogged ? 'editing' : 'empty'})`}
           </Kicker>
           <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 20 }}>
             {wasLogged
-              ? 'This day already has a check-in — saving overwrites it.'
-              : "Sliders start at that week's average rather than yesterday's value, so a " +
-                'backfilled day cannot quietly inherit the wrong number.'}
+              ? 'This day already has a check-in. Saving will replace it.'
+              : 'The sliders start at your average for that week.'}
           </Txt>
 
           <Card style={{ marginTop: spacing.lg, paddingBottom: spacing.xs }}>
@@ -211,7 +200,7 @@ export default function BackfillScreen(): React.ReactElement {
             style={{ marginTop: spacing.xl }}
           />
           <Txt variant="caption" tone="faint" style={{ marginTop: spacing.md, lineHeight: 18 }}>
-            Saving a past date rebuilds every rule window that reaches it, then rescores today.
+            Your score will update after you save.
           </Txt>
         </Reveal>
       ) : null}

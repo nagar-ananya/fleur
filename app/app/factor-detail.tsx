@@ -1,12 +1,3 @@
-/**
- * Factor detail — one rule, chart first. Reachable from the Rules tab.
- *
- * Shows today's points and the maximum side by side, a big line of the
- * points this rule added each day over the last two weeks (scored the same
- * way as today, from `risk.history`), how the rule works (`ruleHow`) and why
- * it is in the rulebook.
- */
-
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useMemo } from 'react';
 import { View } from 'react-native';
@@ -48,7 +39,6 @@ export default function FactorDetailScreen(): React.ReactElement {
   const max = Math.abs(rule?.points ?? 0);
 
   const ready = risk.status === 'ready' ? risk : null;
-  // Rounded exactly as the score table rounds it, so both show the same number.
   const today = ready ? (wholePointsById(ready.rules, rulebook).get(ruleId) ?? null) : null;
 
   const history = useMemo(
@@ -68,7 +58,9 @@ export default function FactorDetailScreen(): React.ReactElement {
       <Stack.Screen options={{ title: 'Rule' }} />
 
       <Reveal>
-        <Txt variant="title">{label}</Txt>
+        <Txt variant="title" style={{ lineHeight: 32 }}>
+          {label}
+        </Txt>
         <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg }}>
           <PointsBox
             title="Today's points"
@@ -83,7 +75,7 @@ export default function FactorDetailScreen(): React.ReactElement {
         <Reveal delay={60}>
           <Card level={2} style={{ marginTop: spacing.lg }}>
             <Kicker style={{ marginBottom: spacing.md }}>
-              {raises ? 'Points added · last 2 weeks' : 'Points taken off · last 2 weeks'}
+              {raises ? 'Points added in the last 2 weeks' : 'Points taken off in the last 2 weeks'}
             </Kicker>
             <RuleChart points={history} max={max} color={line} />
             <Txt variant="caption" tone="faint" style={{ marginTop: spacing.sm }}>
@@ -136,10 +128,8 @@ function PointsBox({
       style={{
         flex: 1,
         backgroundColor: palette.surface,
-        borderRadius: radius.md,
+        borderRadius: radius.lg,
         padding: spacing.md,
-        borderWidth: 1,
-        borderColor: palette.border,
       }}
     >
       <Txt variant="caption" tone="muted">
@@ -152,7 +142,6 @@ function PointsBox({
   );
 }
 
-/** The same small table for every rule: example readings and the points each gives. */
 function HowItWorks({ how }: { how: RuleHow }): React.ReactElement {
   const { palette } = useTheme();
   return (

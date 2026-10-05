@@ -1,13 +1,3 @@
-/**
- * Check-in inputs (REQUIREMENTS §11.3).
- *
- * The slider is hand-rolled rather than pulled from a package: it is one
- * PanResponder and some arithmetic, and it keeps the dependency budget (§16)
- * for things that earn it. FR-2.6 requires every slider to show its numeric
- * value and a text anchor at each end — that is baked into the component so it
- * cannot be forgotten at a call site.
- */
-
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   PanResponder,
@@ -21,7 +11,6 @@ import {
 
 import { useTheme } from '../hooks/useTheme';
 import { MIN_TOUCH_TARGET, radius, spacing, type Gradient } from '../theme';
-import { GradientFill } from './gradient';
 import { CheckIcon } from './icons';
 import { PressableScale } from './motion';
 import { Txt } from './primitives';
@@ -29,13 +18,6 @@ import { Txt } from './primitives';
 const TRACK_HEIGHT = 10;
 export const THUMB_SIZE = 30;
 
-/**
- * Slider geometry, extracted so it can be tested without rendering.
- *
- * `positionFromValue` and `valueFromPosition` are inverses: the thumb's centre
- * for a value must be the touch position that produces that same value, or the
- * control fights the finger.
- */
 export function positionFromValue(
   value: number,
   width: number,
@@ -59,7 +41,6 @@ export function valueFromPosition(
   const ratio = Math.min(Math.max((x - THUMB_SIZE / 2) / usable, 0), 1);
   const raw = min + ratio * (max - min);
   const snapped = Math.round(raw / step) * step;
-  // Re-round to kill float dust from fractional steps (0.1 + 0.2 arithmetic).
   const decimals = (String(step).split('.')[1] ?? '').length;
   return Math.min(max, Math.max(min, Number(snapped.toFixed(decimals))));
 }
@@ -71,7 +52,6 @@ export interface ScaleSliderProps {
   min?: number;
   max?: number;
   step?: number;
-  /** FR-2.6: a text anchor is required at each end. */
   minAnchor: string;
   maxAnchor: string;
   unit?: string;
@@ -105,10 +85,7 @@ export function ScaleSlider({
     setWidth(next);
   }, []);
 
-  // The handler is read through a ref so the PanResponder can be created once.
-  // Call sites pass an inline arrow, so depending on `onChange` directly would
-  // rebuild the responder on every render — including mid-drag, which swaps
-  // the handlers out from under an in-flight gesture.
+  // Keep the latest onChange in a ref so the PanResponder is only made once.
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
@@ -131,11 +108,6 @@ export function ScaleSlider({
   );
 
   const thumbLeft = positionFromValue(value ?? min, width, min, max);
-  // Pixels, derived from the thumb, rather than a percentage of the track.
-  // A percentage is computed against a different span than the thumb offset
-  // (the thumb can only travel `width - THUMB_SIZE`), so the two drift apart
-  // and the fill visibly lags behind the handle at the top of the range.
-  // Ending the fill at the thumb's centre keeps them locked together.
   const fillWidth = thumbLeft + THUMB_SIZE / 2;
   const isSet = value !== null;
 
@@ -165,35 +137,12 @@ export function ScaleSlider({
         accessibilityValue={{ min, max, now: value ?? min }}
         style={styles.touchArea}
       >
-        {/* Both children are transparent to touches. `locationX` is measured
-            against whichever view the finger is actually over — and the thumb
-            sits under the finger by definition once it catches up — so a
-            hittable thumb makes the reading collapse to 0-30px inside it, and
-            the value snaps to the minimum mid-drag. */}
         <View
           pointerEvents="none"
-          style={[styles.track, { backgroundColor: palette.surfaceAlt }]}
+          style={[styles.track, { backgroundColor: palette.surfaceSunken }]}
         >
-          {/* Solid base plus a full-track gradient clipped to the fill width.
-              A percentage-sized SVG inside a resizing parent did not follow it
-              reliably, leaving the bar stale. Painting the gradient at a fixed
-              full-track width and clipping it also makes the colour ramp span
-              the whole scale rather than compressing into the filled part. */}
           {isSet && fillWidth > 0 ? (
-            <View
-              style={{
-                width: fillWidth,
-                height: TRACK_HEIGHT,
-                overflow: 'hidden',
-                backgroundColor: ramp.from,
-              }}
-            >
-              {width > 0 ? (
-                <View style={{ width, height: TRACK_HEIGHT }}>
-                  <GradientFill gradient={ramp} angle="horizontal" />
-                </View>
-              ) : null}
-            </View>
+            <View style={{ width: fillWidth, height: TRACK_HEIGHT, backgroundColor: ramp.to }} />
           ) : null}
         </View>
         <View
@@ -211,14 +160,13 @@ export function ScaleSlider({
       </View>
 
       <View style={styles.headerRow}>
-        <Txt variant="caption" tone="faint">{`${min} · ${minAnchor}`}</Txt>
-        <Txt variant="caption" tone="faint">{`${max} · ${maxAnchor}`}</Txt>
+        <Txt variant="caption" tone="faint">{`${min} - ${minAnchor}`}</Txt>
+        <Txt variant="caption" tone="faint">{`${max} - ${maxAnchor}`}</Txt>
       </View>
     </View>
   );
 }
 
-/** Pill toggle, used where labels are short and the grid should read as a choice. */
 export function ChipToggle({
   label,
   value,
@@ -241,14 +189,12 @@ export function ChipToggle({
       style={[
         styles.chip,
         {
-          backgroundColor: value ? 'transparent' : palette.surfaceAlt,
-          borderColor: value ? 'transparent' : palette.border,
-          overflow: 'hidden',
+          backgroundColor: value ? palette.primary : palette.surface,
+          borderColor: value ? palette.primaryDeep : palette.border,
         },
         style,
       ]}
     >
-      {value ? <GradientFill gradient={palette.gradients.primary} /> : null}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         {value ? <CheckIcon size={15} color={palette.onAccent} /> : null}
         <Txt variant="label" style={{ color: value ? palette.onAccent : palette.text }}>
@@ -259,13 +205,6 @@ export function ChipToggle({
   );
 }
 
-/**
- * Tappable card with a title and an explanatory hint.
- *
- * Events need the hint — "skin injury" means little until you read "cut,
- * scratch, sunburn, friction" — and a full-width target is far easier to hit
- * than a switch.
- */
 export function SelectableCard({
   label,
   hint,
@@ -302,8 +241,6 @@ export function SelectableCard({
           },
         ]}
       >
-        {/* Paired with accessibilityState above, so the tick is never the only
-            signal that something is selected. */}
         {value ? <CheckIcon size={14} color={palette.onAccent} /> : null}
       </View>
       <View style={{ flex: 1 }}>
@@ -399,13 +336,11 @@ export function ChoiceRow<T extends string>({
             style={[
               styles.chip,
               {
-                backgroundColor: selected ? 'transparent' : palette.surface,
-                borderColor: selected ? 'transparent' : palette.border,
-                overflow: 'hidden',
+                backgroundColor: selected ? palette.primary : palette.surface,
+                borderColor: selected ? palette.primaryDeep : palette.border,
               },
             ]}
           >
-            {selected ? <GradientFill gradient={palette.gradients.primary} /> : null}
             <Txt variant="label" style={{ color: selected ? palette.onAccent : palette.text }}>
               {labels[option]}
             </Txt>
@@ -416,7 +351,6 @@ export function ChoiceRow<T extends string>({
   );
 }
 
-/** Segmented progress across the check-in steps. */
 export function StepProgress({
   total,
   current,
@@ -436,14 +370,11 @@ export function StepProgress({
           key={i}
           style={{
             flex: 1,
-            height: 5,
+            height: 6,
             borderRadius: 3,
-            overflow: 'hidden',
-            backgroundColor: palette.surfaceAlt,
+            backgroundColor: i <= current ? palette.primary : palette.surfaceSunken,
           }}
-        >
-          {i <= current ? <GradientFill gradient={palette.gradients.primary} angle="horizontal" /> : null}
-        </View>
+        />
       ))}
     </View>
   );
@@ -471,10 +402,6 @@ const styles = StyleSheet.create({
     height: THUMB_SIZE,
     borderRadius: THUMB_SIZE / 2,
     borderWidth: 3,
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
   },
   toggleRow: {
     flexDirection: 'row',
@@ -493,7 +420,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
     borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
   },
   selectable: {
     flexDirection: 'row',
@@ -516,7 +443,6 @@ const styles = StyleSheet.create({
   },
 });
 
-/** Two big answer buttons for a yes/no question. */
 export function YesNo({
   value,
   onChange,
@@ -543,11 +469,11 @@ export function YesNo({
               alignItems: 'center',
               justifyContent: 'center',
               borderWidth: 2,
-              borderColor: selected ? palette.primary : palette.border,
-              backgroundColor: selected ? palette.primarySoft : palette.surfaceAlt,
+              borderColor: selected ? palette.primary : palette.surface,
+              backgroundColor: selected ? palette.primarySoft : palette.surface,
             }}
           >
-            <Txt variant="heading" style={{ color: selected ? palette.primary : palette.text }}>
+            <Txt variant="title" style={{ color: selected ? palette.primary : palette.text }}>
               {option ? 'Yes' : 'No'}
             </Txt>
           </PressableScale>
@@ -557,7 +483,6 @@ export function YesNo({
   );
 }
 
-/** A big number with − and + either side, for counts like hours or drinks. */
 export function NumberStepper({
   value,
   onChange,
@@ -587,18 +512,22 @@ export function NumberStepper({
         borderRadius: 32,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: palette.surfaceAlt,
+        backgroundColor: palette.surface,
         opacity: disabled ? 0.4 : 1,
       }}
     >
-      <Txt variant="title">{label}</Txt>
+      <Txt variant="title" tone="accent">
+        {label}
+      </Txt>
     </PressableScale>
   );
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
       {button('−', -step, value !== null && current <= min)}
       <View style={{ alignItems: 'center' }}>
-        <Txt variant="hero">{value === null ? '—' : `${current}`}</Txt>
+        <Txt variant="hero" style={{ fontSize: 64, lineHeight: 76 }}>
+          {value === null ? '—' : `${current}`}
+        </Txt>
         <Txt tone="muted">{unit}</Txt>
       </View>
       {button('+', step, current >= max)}

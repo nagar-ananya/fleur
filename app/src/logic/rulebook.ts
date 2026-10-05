@@ -1,8 +1,3 @@
-/**
- * Types for `assets/rulebook.json` — the hand-written points system that
- * replaced the trained model. See `docs/rules-engine-design.md`.
- */
-
 import rulebookJson from '../../assets/rulebook.json';
 
 export type RiskBand = 'low' | 'elevated' | 'high';
@@ -12,7 +7,6 @@ export type How = 'today' | 'average' | 'highest' | 'lowest' | 'total';
 export interface LookAt {
   readonly column: string;
   readonly how: How;
-  /** Days ago, both ends included. `from: 7, to: 14` means days t-14 .. t-7. */
   readonly from?: number;
   readonly to?: number;
 }
@@ -20,12 +14,9 @@ export interface LookAt {
 export interface Rule {
   readonly id: string;
   readonly label: string;
-  /** Base variable, for `FACTOR_EXPLANATIONS` and `categoryForVariable`. */
   readonly variable: string;
-  /** Most this rule can add. Negative takes points off. */
   readonly points: number;
   readonly look_at: LookAt;
-  /** Value scoring nothing. May be greater than `high` when less is worse. */
   readonly low: number;
   readonly high: number;
 }
@@ -55,9 +46,9 @@ export interface Rulebook {
   readonly rules: readonly Rule[];
 }
 
+// The 12 rules live in assets/rulebook.json.
 export const rulebook = rulebookJson as unknown as Rulebook;
 
-/** A rule's fixed number (1-based, rulebook order), shared by the check-in and the score breakdown. */
 export function ruleNumber(id: string, book: Rulebook = rulebook): number {
   return book.rules.findIndex((r) => r.id === id) + 1;
 }

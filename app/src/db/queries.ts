@@ -1,12 +1,3 @@
-/**
- * All database access (REQUIREMENTS §6, §16).
- *
- * This module is the *only* place snake_case database columns meet camelCase
- * TypeScript properties. Nothing above it should ever see a raw column name,
- * with one deliberate exception: `loadFeatureInputRows` hands the scoring
- * engine snake_case keys, because those are the names the rulebook uses.
- */
-
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { FrameInputRow } from '../logic/frame';
@@ -22,10 +13,6 @@ import type {
   WearableDay,
 } from '../types/models';
 import { addDays, todayLocal } from '../utils/dates';
-
-// --------------------------------------------------------------------------
-// Row shapes as SQLite returns them
-// --------------------------------------------------------------------------
 
 interface ProfileRow {
   psoriasis_type: string;
@@ -93,36 +80,16 @@ interface WearableRow {
 const bool = (value: number | null): boolean => value === 1;
 const int = (value: boolean): number => (value ? 1 : 0);
 
-/**
- * Serialises every batched write onto one chain.
- *
- * `withTransactionAsync` does not serialise, so two overlapping callers issue a
- * nested BEGIN and SQLite rejects the batch with "cannot start a transaction
- * within a transaction" — which happened on a real device, on first launch,
- * when two environment refreshes raced before any `fetched_at` existed to
- * rate-limit them.
- *
- * expo-sqlite offers `withExclusiveTransactionAsync` for this, but it opens a
- * second native connection and closes it in a `finally`, which surfaced as
- * "Cannot convert provided JavaScriptObject to the SharedObject" on Android.
- * A queue in JS is simpler, has no native surface, and solves the same problem.
- */
 let writeQueue: Promise<unknown> = Promise.resolve();
 
 function serialize<T>(task: () => Promise<T>): Promise<T> {
   const run = writeQueue.then(task, task);
-  // Keep the chain alive even if a link rejects, so one failed write cannot
-  // wedge every write that follows it.
   writeQueue = run.then(
     () => undefined,
     () => undefined,
   );
   return run;
 }
-
-// --------------------------------------------------------------------------
-// Profile
-// --------------------------------------------------------------------------
 
 export async function getProfile(db: SQLiteDatabase): Promise<Profile | null> {
   const row = await db.getFirstAsync<ProfileRow>('SELECT * FROM profile WHERE id = 1;');
@@ -162,10 +129,6 @@ export async function saveProfile(db: SQLiteDatabase, profile: Profile): Promise
     profile.createdAt,
   );
 }
-
-// --------------------------------------------------------------------------
-// Check-ins
-// --------------------------------------------------------------------------
 
 function toCheckIn(row: CheckInRow): CheckIn {
   return {
@@ -209,7 +172,6 @@ export async function listCheckIns(
   return rows.map(toCheckIn);
 }
 
-/** The most recent check-in strictly before `date` — used to pre-fill sliders (FR-2.3). */
 export async function getPreviousCheckIn(
   db: SQLiteDatabase,
   date: string,
@@ -221,16 +183,12 @@ export async function getPreviousCheckIn(
   return row ? toCheckIn(row) : null;
 }
 
-/** FR-4.2: distinct days logged, which gates whether a risk value is shown. */
 export async function countCheckInDays(db: SQLiteDatabase): Promise<number> {
   const row = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM checkin;');
   return row?.n ?? 0;
 }
 
-/**
- * FR-2.5: exactly one row per calendar date; saving the same date again
- * overwrites, preserving the original `created_at`.
- */
+// One check-in per day. Saving the same day again replaces it.
 export async function saveCheckIn(db: SQLiteDatabase, checkIn: CheckIn): Promise<void> {
   const now = new Date().toISOString();
   await db.runAsync(
@@ -274,21 +232,10 @@ export async function saveCheckIn(db: SQLiteDatabase, checkIn: CheckIn): Promise
   );
 }
 
-/**
- * Remove a single day's check-in. Returns whether a row was actually deleted.
- *
- * Editing a day overwrites it (FR-2.5); this is the only way to get a date
- * back to genuinely un-logged, which is what the Today screen keys its
- * "How is your skin today?" state off.
- */
 export async function deleteCheckIn(db: SQLiteDatabase, date: string): Promise<boolean> {
   const result = await db.runAsync('DELETE FROM checkin WHERE date = ?;', date);
   return result.changes > 0;
 }
-
-// --------------------------------------------------------------------------
-// Environment
-// --------------------------------------------------------------------------
 
 export async function upsertEnvironment(
   db: SQLiteDatabase,
@@ -355,7 +302,6 @@ function toEnvironmentDay(row: EnvironmentRow): EnvironmentDay {
   };
 }
 
-/** Cached conditions for one date, or null when nothing has been fetched. */
 export async function getEnvironmentDay(
   db: SQLiteDatabase,
   date: string,
@@ -367,7 +313,6 @@ export async function getEnvironmentDay(
   return row ? toEnvironmentDay(row) : null;
 }
 
-/** API-3 / FR-3.4: the rate limiter reads this rather than any in-memory flag. */
 export async function getLastEnvironmentFetch(db: SQLiteDatabase): Promise<string | null> {
   const row = await db.getFirstAsync<{ fetched_at: string }>(
     'SELECT fetched_at FROM environment ORDER BY fetched_at DESC LIMIT 1;',
@@ -379,10 +324,6 @@ export async function countEnvironmentDays(db: SQLiteDatabase): Promise<number> 
   const row = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM environment;');
   return row?.n ?? 0;
 }
-
-// --------------------------------------------------------------------------
-// Wearable
-// --------------------------------------------------------------------------
 
 export async function upsertWearable(
   db: SQLiteDatabase,
@@ -413,7 +354,6 @@ export async function upsertWearable(
   );
 }
 
-/** A single date's wearable reading, or null. Used by the check-in's Body & wearable step. */
 export async function getWearableDay(
   db: SQLiteDatabase,
   date: string,
@@ -427,17 +367,10 @@ export async function getWearableDay(
     restingHr: row.resting_hr,
     hrv: row.hrv,
     steps: row.steps,
-    // The column is unconstrained TEXT; anything unrecognised is treated as
-    // Health Connect, the only source HD-1's stub could ever write.
     source: row.source === 'healthkit' ? 'healthkit' : 'health_connect',
     fetchedAt: row.fetched_at,
   };
 }
-
-// --------------------------------------------------------------------------
-// Meta — small key/value preferences and feature state that don't warrant
-// their own table (§6 keeps the schema to what a migration actually needs).
-// --------------------------------------------------------------------------
 
 export async function getMeta(db: SQLiteDatabase, key: string): Promise<string | null> {
   const row = await db.getFirstAsync<{ value: string }>(
@@ -458,10 +391,6 @@ export async function setMeta(db: SQLiteDatabase, key: string, value: string): P
 export async function deleteMeta(db: SQLiteDatabase, key: string): Promise<void> {
   await db.runAsync('DELETE FROM meta WHERE key = ?;', key);
 }
-
-// --------------------------------------------------------------------------
-// AI second opinion — at most one cached answer per day (§17)
-// --------------------------------------------------------------------------
 
 export async function getAiOpinion(
   db: SQLiteDatabase,
@@ -518,10 +447,6 @@ export async function clearAiOpinions(db: SQLiteDatabase): Promise<void> {
   await db.runAsync('DELETE FROM ai_opinion;');
 }
 
-// --------------------------------------------------------------------------
-// Journal (Reset → Mood)
-// --------------------------------------------------------------------------
-
 interface JournalRow {
   id: number;
   date: string;
@@ -529,7 +454,6 @@ interface JournalRow {
   created_at: string;
 }
 
-/** Reset's journal is private, local-only text — never part of your score. */
 export async function saveJournalEntry(
   db: SQLiteDatabase,
   date: string,
@@ -553,10 +477,6 @@ export async function listJournalEntries(
   );
   return rows.map((row) => ({ id: row.id, date: row.date, body: row.body, createdAt: row.created_at }));
 }
-
-// --------------------------------------------------------------------------
-// Predictions
-// --------------------------------------------------------------------------
 
 export async function insertPrediction(
   db: SQLiteDatabase,
@@ -612,16 +532,7 @@ function safeParse(json: string): { feature: string; contribution: number }[] {
   }
 }
 
-// --------------------------------------------------------------------------
-// The ML join
-// --------------------------------------------------------------------------
-
-/**
- * Assemble the daily rows the scoring engine consumes (§7.1), joining
- * check-ins, environment and wearable on date.
- *
- * Keys stay snake_case: these are the variable names the rulebook refers to.
- */
+// Check-ins, weather and wearable data joined into one row per day for scoring.
 export async function loadFeatureInputRows(
   db: SQLiteDatabase,
   endDate: string = todayLocal(),
@@ -702,10 +613,6 @@ export async function loadFeatureInputRows(
     .map((row) => row as FrameInputRow);
 }
 
-// --------------------------------------------------------------------------
-// FR-6.3 CSV export
-// --------------------------------------------------------------------------
-
 const CSV_COLUMNS = [
   'date', 'severity', 'itch', 'stress', 'sleep_hours', 'water_glasses', 'alcohol_units',
   'diet_dairy', 'diet_gluten', 'diet_processed', 'diet_sugar', 'diet_red_meat',
@@ -720,7 +627,6 @@ function csvCell(value: unknown): string {
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-/** Everything the user has logged, as CSV. Stays on the device unless they share it. */
 export async function exportCsv(db: SQLiteDatabase): Promise<string> {
   const checkIns = await db.getAllAsync<CheckInRow & { notes: string | null }>(
     'SELECT * FROM checkin ORDER BY date ASC;',

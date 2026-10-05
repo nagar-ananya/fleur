@@ -1,10 +1,3 @@
-/**
- * Schema migration runner (REQUIREMENTS §6).
- *
- * Version lives in the `meta` table so an upgrade never re-runs statements it
- * has already applied, and a fresh install runs every migration in order.
- */
-
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { DROP_ALL, MIGRATIONS, SCHEMA_VERSION } from './schema';
@@ -19,7 +12,6 @@ async function readVersion(db: SQLiteDatabase): Promise<number> {
     );
     return row ? Number(row.value) : 0;
   } catch {
-    // `meta` does not exist yet — this is a fresh database.
     return 0;
   }
 }
@@ -48,10 +40,6 @@ export async function runMigrations(db: SQLiteDatabase): Promise<number> {
   return SCHEMA_VERSION;
 }
 
-/**
- * FR-7.2 / PRIV-4: irreversibly clear everything, then rebuild empty tables so
- * the app can return straight to onboarding without a restart.
- */
 export async function resetDatabase(db: SQLiteDatabase): Promise<void> {
   for (const statement of DROP_ALL) {
     await db.execAsync(statement);

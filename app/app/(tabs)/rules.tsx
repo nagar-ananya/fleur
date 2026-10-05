@@ -1,22 +1,10 @@
-/**
- * Rules — what Fleur checks (REQUIREMENTS §11.4, FR-5.x).
- *
- * The rulebook itself, not today's numbers: all 12 rules in fixed order
- * (`ruleNumber`), each with the most it can add.
- * Tapping a rule opens `/factor-detail`, which charts that rule's last two
- * weeks. Today's points live on `/risk-detail`, so the two screens never
- * show the same thing.
- *
- * §13.4 rules out calling anything "your #1 trigger".
- */
-
 import { useRouter } from 'expo-router';
 import React from 'react';
 import { View } from 'react-native';
 
 import { ChevronRight } from '../../src/components/icons';
 import { PressableScale, Reveal } from '../../src/components/motion';
-import { Card, Kicker, Screen, ShortDisclaimer, Txt } from '../../src/components/primitives';
+import { Card, NumberCircle, Screen, ScreenTitle, ShortDisclaimer, Txt } from '../../src/components/primitives';
 import { rulebook } from '../../src/hooks/appState';
 import { useTheme } from '../../src/hooks/useTheme';
 import { ruleNumber, type Rule } from '../../src/logic/rulebook';
@@ -28,16 +16,13 @@ export default function RulesScreen(): React.ReactElement {
     router.push({ pathname: '/factor-detail', params: { ruleId: rule.id, label: rule.label } });
 
   return (
-    <Screen contentStyle={{ paddingBottom: 120 }}>
+    <Screen contentStyle={{ paddingBottom: spacing.xxxl }}>
       <Reveal>
-        <Kicker>How Fleur works</Kicker>
-        <Txt variant="display" style={{ marginTop: 4 }}>
-          {`The ${rulebook.rules.length} rules`}
-        </Txt>
-        <Txt tone="muted" style={{ marginTop: spacing.sm, lineHeight: 22 }}>
-          Each rule watches one thing and can add up to a set number of points. Tap a rule to see
-          its last two weeks.
-        </Txt>
+        <ScreenTitle
+          kicker="How Fleur works"
+          title={`The ${rulebook.rules.length} rules`}
+          subtitle="Each rule watches one thing and can add up to a set number of points. Tap a rule to see its last two weeks."
+        />
       </Reveal>
 
       <Reveal delay={60}>
@@ -65,20 +50,7 @@ function RuleCard({ rule, onPress }: { rule: Rule; onPress: () => void }): React
       scaleTo={0.98}
     >
       <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-        <View
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: 16,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: palette.surfaceAlt,
-          }}
-        >
-          <Txt variant="label" tone="muted">
-            {ruleNumber(rule.id)}
-          </Txt>
-        </View>
+        <NumberCircle value={ruleNumber(rule.id)} size={32} />
         <Txt style={{ flex: 1, lineHeight: 21 }}>{rule.label}</Txt>
         <View style={{ alignItems: 'flex-end' }}>
           <Txt variant="caption" tone="faint">

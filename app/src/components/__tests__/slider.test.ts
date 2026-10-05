@@ -1,21 +1,10 @@
-/**
- * Slider geometry (REQUIREMENTS §11.3, FR-2.6).
- *
- * Regression: dragging past roughly the middle of a track made the thumb snap
- * back to the minimum while the number kept climbing. `locationX` is measured
- * against whichever view the finger is over, and the thumb sits under the
- * finger once it catches up — so the reading collapsed to 0-30px *inside the
- * thumb* and quantised to the minimum. The fix makes the thumb and track
- * transparent to touches; these tests lock the maths it depends on.
- */
-
 import {
   THUMB_SIZE,
   positionFromValue,
   valueFromPosition,
 } from '../inputs';
 
-const WIDTH = 330; // a realistic track width on a phone
+const WIDTH = 330;
 const usable = WIDTH - THUMB_SIZE;
 
 describe('positionFromValue', () => {
@@ -53,7 +42,6 @@ describe('valueFromPosition', () => {
   });
 
   it('snaps to the step', () => {
-    // Half-unit steps must produce clean halves, never 7.000000000000001.
     for (let x = 0; x <= WIDTH; x += 7) {
       const value = valueFromPosition(x, WIDTH, 0, 12, 0.5);
       expect(value * 2).toBe(Math.round(value * 2));
@@ -67,12 +55,6 @@ describe('valueFromPosition', () => {
 });
 
 describe('round trip', () => {
-  /**
-   * The core invariant. Placing the thumb for a value, then reading the value
-   * back from the thumb's centre, must return the same value — otherwise the
-   * control moves away from the finger, which is exactly what the bug felt
-   * like on the Water slider.
-   */
   it.each([
     ['severity 0-10', 0, 10, 1],
     ['water 0-15', 0, 15, 1],
@@ -87,7 +69,6 @@ describe('round trip', () => {
   });
 
   it('never collapses to the minimum in the upper half of the track', () => {
-    // The reported symptom: past roughly tick 7 of 15 the thumb jumped to 0.
     for (let value = 8; value <= 15; value += 1) {
       const left = positionFromValue(value, WIDTH, 0, 15);
       const centre = left + THUMB_SIZE / 2;
@@ -95,7 +76,7 @@ describe('round trip', () => {
     }
   });
 
-  it('is monotonic — dragging right never lowers the value', () => {
+  it('never goes down when dragging right', () => {
     let previous = -Infinity;
     for (let x = 0; x <= WIDTH; x += 3) {
       const value = valueFromPosition(x, WIDTH, 0, 15, 1);

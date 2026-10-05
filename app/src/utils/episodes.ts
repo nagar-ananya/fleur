@@ -1,13 +1,3 @@
-/**
- * Flare-episode detection for History (v2 redesign).
- *
- * An episode is a run of at least two *consecutive logged* days at or above
- * a "moderate" severity (6, per `severityWord`'s own bands). A gap in
- * logging breaks a run rather than being bridged — the same "gaps stay gaps"
- * rule `TrendChart` already follows, so a run never implies data that was
- * never recorded.
- */
-
 export interface EpisodeDay {
   date: string;
   severity: number | null;
@@ -51,5 +41,5 @@ export function detectEpisodes(days: readonly EpisodeDay[]): Episode[] {
   }
   flush();
 
-  return episodes.reverse(); // most recent first
+  return episodes.reverse();
 }

@@ -1,12 +1,3 @@
-/**
- * The day-by-day table every rule reads from (REQUIREMENTS §7.1, §7.2, §7.5).
- *
- * One row per calendar day between the first and last date we have, with gaps
- * materialised so a rule looking back 7 days counts calendar days rather than
- * rows. Lifted from the old `src/ml/features.ts` — the join, forward-fill and
- * derived-variable logic is unchanged and still matches the spec.
- */
-
 export const SELF_VARS = [
   'severity',
   'itch',
@@ -39,7 +30,6 @@ export const WEARABLE_VARS = ['sleep_hours_device', 'resting_hr', 'steps'] as co
 
 export const BASE_VARS: readonly string[] = [...SELF_VARS, ...ENV_VARS, ...WEARABLE_VARS];
 
-/** Every column a rule's `look_at.column` may name. */
 export const FRAME_COLUMNS: readonly string[] = [
   ...BASE_VARS,
   'temp_delta_1d',
@@ -50,29 +40,23 @@ export const FRAME_COLUMNS: readonly string[] = [
   'severity_delta',
 ];
 
-/**
- * Observations a rolling window needs before it yields anything. Hardcoded
- * rather than derived so the boundary can't drift.
- */
 const MIN_PERIODS: Readonly<Record<number, number>> = { 3: 2, 7: 5, 14: 9 };
 
-/** §7.5.1 forward-fill horizon, in days. */
+// A missing day can copy the day before it, but only for up to 3 days.
 export const FFILL_LIMIT = 3;
 
-/** §7.5.3 refuse to score past this much missing recent data. */
 export const MAX_MISSING_FRACTION = 0.4;
 export const RECENT_WINDOW = 14;
 
-/** FR-4.2: no score until this many distinct days are logged. */
+// How many days of check-ins we need before showing a score.
 export const MIN_HISTORY_DAYS = 14;
 
 const BASELINE_WINDOW = 14;
 const SLEEP_TARGET_HOURS = 7.5;
 const SLEEP_DEBT_WINDOW = 7;
 
-/** One calendar day as it arrives from `loadFeatureInputRows`. */
 export interface FrameInputRow {
-  readonly date: string; // 'YYYY-MM-DD', user's local calendar day
+  readonly date: string;
   readonly [column: string]: string | number | null | undefined;
 }
 
@@ -81,13 +65,8 @@ export type Series = (number | null)[];
 export interface DailyFrame {
   readonly dates: readonly string[];
   readonly columns: Readonly<Record<string, Series>>;
-  /** 1 where the user actually logged a check-in, taken before any filling. */
   readonly hasCheckin: readonly number[];
 }
-
-// --------------------------------------------------------------------------
-// Date helpers — 'YYYY-MM-DD' arithmetic with no timezone in play
-// --------------------------------------------------------------------------
 
 const MS_PER_DAY = 86_400_000;
 
@@ -111,11 +90,6 @@ export function daysBetween(from: string, to: string): number {
   return Math.round((toUtcMillis(to) - toUtcMillis(from)) / MS_PER_DAY);
 }
 
-// --------------------------------------------------------------------------
-// Series primitives
-// --------------------------------------------------------------------------
-
-/** Carry the last value forward at most `limit` rows. */
 function forwardFill(series: Series, limit: number): Series {
   const out: Series = new Array(series.length).fill(null);
   let last: number | null = null;
@@ -136,7 +110,6 @@ function forwardFill(series: Series, limit: number): Series {
   return out;
 }
 
-/** Trailing mean ending at i inclusive; null until `minPeriods` are present. */
 function rollingMean(series: Series, window: number, minPeriods: number): Series {
   const out: Series = new Array(series.length).fill(null);
   for (let i = 0; i < series.length; i += 1) {
@@ -154,7 +127,6 @@ function rollingMean(series: Series, window: number, minPeriods: number): Series
   return out;
 }
 
-/** Trailing sum, but only when every day in the window is present. */
 function rollingSumComplete(series: Series, window: number): Series {
   const out: Series = new Array(series.length).fill(null);
   for (let i = 0; i < series.length; i += 1) {
@@ -195,10 +167,7 @@ function toNumber(value: string | number | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-// --------------------------------------------------------------------------
-// Assembly
-// --------------------------------------------------------------------------
-
+// Turns the saved rows into one list per column, with one value for every day.
 export function buildDailyFrame(rows: readonly FrameInputRow[]): DailyFrame {
   if (rows.length === 0) {
     return { dates: [], columns: {}, hasCheckin: [] };
@@ -219,10 +188,8 @@ export function buildDailyFrame(rows: readonly FrameInputRow[]): DailyFrame {
     columns[name] = dates.map((date) => toNumber(byDate.get(date)?.[name]));
   }
 
-  // Taken before any filling so the §7.5.3 guard sees the real gaps.
   const hasCheckin = columns.severity.map((value) => (value === null ? 0 : 1));
 
-  // HD-5: where both exist for a date, the wearable sleep value wins.
   const deviceSleep = columns.sleep_hours_device;
   columns.sleep_hours = columns.sleep_hours.map((value, i) =>
     deviceSleep[i] !== null ? deviceSleep[i] : value,
@@ -236,13 +203,11 @@ export function buildDailyFrame(rows: readonly FrameInputRow[]): DailyFrame {
   return { dates, columns, hasCheckin };
 }
 
-/** §7.2 derived variables. Computed after filling. */
 function addDerived(columns: Record<string, Series>): void {
   columns.temp_delta_1d = difference(columns.temp_mean_c);
   columns.humidity_delta_1d = difference(columns.humidity_mean_pct);
   columns.pressure_delta_1d = difference(columns.pressure_hpa);
 
-  // All 7 nights required: a partial sum would overstate the debt.
   const slept = rollingSumComplete(columns.sleep_hours, SLEEP_DEBT_WINDOW);
   columns.sleep_debt_7d = slept.map((total) =>
     total === null ? null : Math.max(0, SLEEP_DEBT_WINDOW * SLEEP_TARGET_HOURS - total),
@@ -256,7 +221,6 @@ function addDerived(columns: Record<string, Series>): void {
   columns.severity_delta = subtract(columns.severity, columns.severity_baseline);
 }
 
-/** Fraction of the trailing 14 calendar days carrying a real check-in. */
 export function recentCheckinCoverage(frame: DailyFrame, index: number): number {
   const start = Math.max(0, index - RECENT_WINDOW + 1);
   let sum = 0;
@@ -264,7 +228,7 @@ export function recentCheckinCoverage(frame: DailyFrame, index: number): number 
   return sum / (index - start + 1);
 }
 
-/** §7.5.3: too much of the recent window missing means no score. */
+// No score if more than 40% of the last 14 days are missing.
 export function canPredict(frame: DailyFrame, index: number): boolean {
   return recentCheckinCoverage(frame, index) >= 1 - MAX_MISSING_FRACTION;
 }

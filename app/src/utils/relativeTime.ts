@@ -1,7 +1,3 @@
-/**
- * "X minutes/hours ago" for cache-freshness readouts (environment fetch,
- * wearable sync). Deliberately coarse — this is a trust signal, not a clock.
- */
 export function formatRelativeTime(iso: string): string {
   const ms = Math.max(0, Date.now() - Date.parse(iso));
   const minutes = Math.round(ms / 60_000);

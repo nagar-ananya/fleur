@@ -1,9 +1,3 @@
-/**
- * Shared pieces for the Reset tab: a tappable session row (used by all six
- * category lists), a checklist row (wind-down / skin routine), and the
- * breathing ring used by the one session with a real timed pattern.
- */
-
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
@@ -12,7 +6,7 @@ import { useTheme } from '../hooks/useTheme';
 import { radius, spacing } from '../theme';
 import { CheckIcon, ChevronRight } from './icons';
 import { PressableScale } from './motion';
-import { Card, Pill, Txt } from './primitives';
+import { Card, Txt } from './primitives';
 
 export function ChecklistRow({
   title,
@@ -46,17 +40,17 @@ export function ChecklistRow({
       >
         <View
           style={{
-            width: 28,
-            height: 28,
-            borderRadius: 14,
+            width: 26,
+            height: 26,
+            borderRadius: 13,
             borderWidth: 2,
             borderColor: done ? palette.primary : palette.borderStrong,
-            backgroundColor: done ? palette.primary : 'transparent',
+            backgroundColor: done ? palette.primary : palette.surface,
             alignItems: 'center',
             justifyContent: 'center',
           }}
         >
-          {done ? <CheckIcon size={16} color={palette.onAccent} /> : null}
+          {done ? <CheckIcon size={17} color={palette.onAccent} /> : null}
         </View>
         <View style={{ flex: 1 }}>
           <Txt variant="label" style={done ? { color: palette.textFaint, textDecorationLine: 'line-through' } : undefined}>
@@ -73,13 +67,6 @@ export function ChecklistRow({
   );
 }
 
-/**
- * A breathing pacer: a ring that grows and shrinks through a phase pattern
- * (e.g. 4s in, 7s hold, 8s out), with the current phase named in the centre.
- *
- * Pausable — `playing` stops the animation exactly where it is rather than
- * resetting, so toggling play does not visually snap.
- */
 export function BreathingRing({
   pattern,
   phaseLabels,
@@ -104,7 +91,7 @@ export function BreathingRing({
     const runPhase = (): void => {
       if (cancelled) return;
       const duration = Math.max(pattern[index], 0.5) * 1000;
-      const growing = index % 2 === 0; // inhale-style phases grow, hold/exhale settle back
+      const growing = index % 2 === 0;
       setPhaseIndex(index);
       Animated.timing(scale, {
         toValue: growing ? 1 : 0.82,
@@ -138,21 +125,21 @@ export function BreathingRing({
           transform: [{ scale }],
         }}
       />
-      <Svg width={size * 0.62} height={size * 0.62} style={{ position: 'absolute' }}>
+      <Svg width={size * 0.76} height={size * 0.76} style={{ position: 'absolute' }}>
         <Circle
-          cx={(size * 0.62) / 2}
-          cy={(size * 0.62) / 2}
-          r={(size * 0.62) / 2 - 3}
+          cx={(size * 0.76) / 2}
+          cy={(size * 0.76) / 2}
+          r={(size * 0.76) / 2 - 3}
           stroke={palette.primary}
           strokeWidth={2}
           fill="none"
           opacity={0.6}
         />
       </Svg>
-      <View style={{ alignItems: 'center' }}>
+      <View style={{ alignItems: 'center', width: size * 0.9 }}>
         <Txt variant="title">{label || '—'}</Txt>
-        <Txt variant="caption" tone="faint" style={{ marginTop: 4, letterSpacing: 1 }}>
-          {pattern.map((p) => `${p}`).join(' · ').toUpperCase()}
+        <Txt variant="caption" tone="faint" center style={{ alignSelf: 'stretch', marginTop: 4 }}>
+          {pattern.map((p) => `${p}`).join(' - ')}
         </Txt>
       </View>
       <View style={{ position: 'absolute', bottom: 0, opacity: 0 }}>
@@ -162,5 +149,4 @@ export function BreathingRing({
   );
 }
 
-/** Small pill-style radius reused by a couple of Reset screens. */
 export const RESET_CARD_RADIUS = radius.lg;

@@ -1,24 +1,13 @@
-/**
- * Open-Meteo client (REQUIREMENTS §10.1).
- *
- * The only outbound network calls in the entire product, carrying latitude and
- * longitude and nothing else (PRIV-2). No API key exists because none is
- * needed. Everything here degrades to "no data" rather than throwing: a failed
- * weather fetch must never stop someone logging a check-in (FR-3.3).
- */
-
 import type { EnvironmentDay } from '../types/models';
 
+// Weather and air quality come from Open-Meteo, which is free and needs no API key.
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 const AIR_QUALITY_URL = 'https://air-quality-api.open-meteo.com/v1/air-quality';
 
-/** API-1 */
 const TIMEOUT_MS = 10_000;
-/** API-2: at most two retries, backing off 1s then 4s. */
 const RETRY_DELAYS_MS = [1_000, 4_000];
-/** API-3 / FR-3.4: never more than one request per hour per endpoint. */
+// Fetch at most once an hour, and refresh after 6 hours.
 export const MIN_FETCH_INTERVAL_MS = 60 * 60 * 1000;
-/** FR-3.1: refresh once the cached data is older than this. */
 export const STALE_AFTER_MS = 6 * 60 * 60 * 1000;
 
 export const PAST_DAYS = 14;
@@ -53,7 +42,6 @@ export interface Coordinates {
   longitude: number;
 }
 
-/** PRIV-3: ~1km precision is plenty for weather and is all we will transmit. */
 export function coarsen({ latitude, longitude }: Coordinates): Coordinates {
   return {
     latitude: Math.round(latitude * 100) / 100,
@@ -89,18 +77,12 @@ async function getJsonWithRetry(
         `[fleur] open-meteo request failed (attempt ${attempt + 1})`,
         error instanceof Error ? error.message : error,
       );
-      // API-2: give up silently once the retries are spent. The caller surfaces
-      // a non-blocking indicator; it does not get an exception to handle.
       if (last) return null;
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
     }
   }
   return null;
 }
-
-// --------------------------------------------------------------------------
-// API-4 response validation
-// --------------------------------------------------------------------------
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -116,7 +98,6 @@ interface DailyBlock {
   values: Record<string, (number | null)[]>;
 }
 
-/** Reject a malformed payload outright rather than writing a row of nulls. */
 function parseDaily(payload: unknown, fields: readonly string[]): DailyBlock | null {
   if (!isRecord(payload) || !isRecord(payload.daily)) return null;
   const daily = payload.daily;
@@ -127,8 +108,6 @@ function parseDaily(payload: unknown, fields: readonly string[]): DailyBlock | n
   const values: Record<string, (number | null)[]> = {};
   for (const field of fields) {
     const parsed = numberArray(daily[field], time.length);
-    // A field the API stopped serving is tolerable; a length mismatch is not,
-    // because it would silently misalign every value against its date.
     values[field] = parsed ?? new Array<number | null>(time.length).fill(null);
     if (daily[field] !== undefined && parsed === null) return null;
   }
@@ -156,7 +135,6 @@ function parseHourly(payload: unknown, fields: readonly string[]): HourlyBlock |
   return { time: time as string[], values };
 }
 
-/** §10.1: hourly air quality is aggregated to daily means before storage. */
 function aggregateDaily(block: HourlyBlock): Map<string, Record<string, number | null>> {
   const sums = new Map<string, Record<string, { total: number; count: number }>>();
 
@@ -183,9 +161,6 @@ function aggregateDaily(block: HourlyBlock): Map<string, Record<string, number |
     for (const [field, acc] of Object.entries(bucket)) {
       record[field] = acc.count > 0 ? acc.total / acc.count : null;
     }
-    // §10.1: pollen_total sums the available species, missing species as 0.
-    // Left null only when no species reported at all, so an area with no
-    // pollen coverage is not recorded as a genuine zero.
     const reported = POLLEN_SPECIES.filter((s) => typeof record[s] === 'number');
     record.pollen_total = reported.length
       ? reported.reduce((total, s) => total + (record[s] ?? 0), 0)
@@ -195,13 +170,8 @@ function aggregateDaily(block: HourlyBlock): Map<string, Record<string, number |
   return out;
 }
 
-// --------------------------------------------------------------------------
-// Public API
-// --------------------------------------------------------------------------
-
 export interface FetchOutcome {
   days: EnvironmentDay[];
-  /** False when the network failed or the payload was rejected. */
   ok: boolean;
 }
 
@@ -264,7 +234,6 @@ export async function fetchEnvironment(
   return { days, ok: true };
 }
 
-/** API-3: the hard rate limit, evaluated against the stored `fetched_at`. */
 export function canFetch(lastFetchedAt: string | null, now: number = Date.now()): boolean {
   if (!lastFetchedAt) return true;
   const last = Date.parse(lastFetchedAt);
@@ -272,7 +241,6 @@ export function canFetch(lastFetchedAt: string | null, now: number = Date.now())
   return now - last >= MIN_FETCH_INTERVAL_MS;
 }
 
-/** FR-3.1: data older than 6 hours should be refreshed when the app opens. */
 export function isStale(lastFetchedAt: string | null, now: number = Date.now()): boolean {
   if (!lastFetchedAt) return true;
   const last = Date.parse(lastFetchedAt);

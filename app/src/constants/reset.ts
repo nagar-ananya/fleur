@@ -1,32 +1,17 @@
-/**
- * Reset — small, actionable things to do today. Four lists, nothing else:
- * breathing exercises, recipes, movement timers and a skin-care checklist.
- *
- * Not treatment (§2). Each one is a lever on something the check-in logs —
- * stress, food, sleep, skin handling — never a claim about psoriasis itself.
- */
-
 export type ResetCategoryKey = 'breath' | 'eat' | 'move' | 'skin';
 
 export interface ResetCategory {
   key: ResetCategoryKey;
   title: string;
-  /** One short line under the title. */
   subtitle: string;
   icon: 'wind' | 'bowl' | 'move' | 'drop';
 }
 
-// --------------------------------------------------------------------------
-// Breathing
-// --------------------------------------------------------------------------
-
 export interface BreathExercise {
   id: string;
   title: string;
-  /** What it is for, in a few words. */
   meta: string;
   minutes: number;
-  /** Seconds per phase — [in, hold, out] or [in, hold, out, hold]. Drives the ring. */
   pattern: readonly number[];
   phaseLabels: readonly string[];
 }
@@ -34,7 +19,7 @@ export interface BreathExercise {
 export const BREATH_EXERCISES: readonly BreathExercise[] = [
   {
     id: '478',
-    title: '4 · 7 · 8 breathing',
+    title: '4-7-8 breathing',
     meta: 'Calm down when stressed',
     minutes: 4,
     pattern: [4, 7, 8],
@@ -66,14 +51,9 @@ export const BREATH_EXERCISES: readonly BreathExercise[] = [
   },
 ];
 
-// --------------------------------------------------------------------------
-// Eat
-// --------------------------------------------------------------------------
-
 export interface Recipe {
   id: string;
   title: string;
-  /** Meal and time, e.g. "Breakfast · 15 min". */
   meta: string;
   ingredients: readonly string[];
   steps: readonly string[];
@@ -83,7 +63,7 @@ export const RECIPES: readonly Recipe[] = [
   {
     id: 'turmeric-oat',
     title: 'Turmeric & oat bowl',
-    meta: 'Breakfast · 15 min',
+    meta: 'Breakfast, 15 min',
     ingredients: [
       '1 cup rolled oats',
       '1½ cups oat milk',
@@ -102,7 +82,7 @@ export const RECIPES: readonly Recipe[] = [
   {
     id: 'berry-smoothie',
     title: 'Berry & spinach smoothie',
-    meta: 'Breakfast or snack · 5 min',
+    meta: 'Breakfast or snack, 5 min',
     ingredients: [
       '1 cup frozen mixed berries',
       'Handful of spinach',
@@ -115,7 +95,7 @@ export const RECIPES: readonly Recipe[] = [
   {
     id: 'avocado-egg-toast',
     title: 'Avocado & egg toast',
-    meta: 'Breakfast · 10 min',
+    meta: 'Breakfast, 10 min',
     ingredients: [
       '2 slices whole-grain bread',
       '1 ripe avocado',
@@ -132,7 +112,7 @@ export const RECIPES: readonly Recipe[] = [
   {
     id: 'chickpea-bowl',
     title: 'Chickpea & quinoa bowl',
-    meta: 'Lunch · 20 min',
+    meta: 'Lunch, 20 min',
     ingredients: [
       '1 cup cooked quinoa',
       '1 can chickpeas, drained',
@@ -150,7 +130,7 @@ export const RECIPES: readonly Recipe[] = [
   {
     id: 'lentil-soup',
     title: 'Lentil & vegetable soup',
-    meta: 'Lunch or dinner · 35 min',
+    meta: 'Lunch or dinner, 35 min',
     ingredients: [
       '1 cup red lentils',
       '1 onion, chopped',
@@ -169,7 +149,7 @@ export const RECIPES: readonly Recipe[] = [
   {
     id: 'bean-tacos',
     title: 'Sweet potato & black bean tacos',
-    meta: 'Lunch or dinner · 25 min',
+    meta: 'Lunch or dinner, 25 min',
     ingredients: [
       '1 sweet potato, cubed',
       '1 can black beans, drained',
@@ -187,7 +167,7 @@ export const RECIPES: readonly Recipe[] = [
   {
     id: 'salmon-tray',
     title: 'Salmon & veggie tray bake',
-    meta: 'Dinner · 30 min',
+    meta: 'Dinner, 30 min',
     ingredients: [
       '2 salmon fillets',
       '1 sweet potato, cubed',
@@ -206,7 +186,7 @@ export const RECIPES: readonly Recipe[] = [
   {
     id: 'chicken-stir-fry',
     title: 'Chicken & veggie stir-fry',
-    meta: 'Dinner · 20 min',
+    meta: 'Dinner, 20 min',
     ingredients: [
       '1 chicken breast, sliced',
       '2 cups mixed vegetables (peppers, broccoli, carrots)',
@@ -223,15 +203,10 @@ export const RECIPES: readonly Recipe[] = [
   },
 ];
 
-// --------------------------------------------------------------------------
-// Movement
-// --------------------------------------------------------------------------
-
 export interface MoveTimer {
   id: string;
   title: string;
   minutes: number;
-  /** What to do while the timer runs — a few short steps. */
   steps: readonly string[];
 }
 
@@ -258,7 +233,7 @@ export const MOVE_TIMERS: readonly MoveTimer[] = [
     id: 'yoga',
     title: 'Gentle yoga',
     minutes: 10,
-    steps: ['Cat–cow', 'Low lunge, both sides', "Child's pose", 'Lie still and breathe'],
+    steps: ['Cat-cow', 'Low lunge, both sides', "Child's pose", 'Lie still and breathe'],
   },
   {
     id: 'walk',
@@ -267,10 +242,6 @@ export const MOVE_TIMERS: readonly MoveTimer[] = [
     steps: ['Walk at an easy pace', 'Get some daylight', 'Come back when the timer rings'],
   },
 ];
-
-// --------------------------------------------------------------------------
-// Skin routine
-// --------------------------------------------------------------------------
 
 export interface ChecklistItem {
   key: string;
@@ -290,10 +261,6 @@ export const SKIN_PM_STEPS: readonly ChecklistItem[] = [
   { key: 'pm3', title: 'Thick moisturizer before bed' },
 ];
 
-// --------------------------------------------------------------------------
-// The list on the Reset tab
-// --------------------------------------------------------------------------
-
 export const RESET_CATEGORIES: readonly ResetCategory[] = [
   { key: 'breath', title: 'Breathing', subtitle: `${BREATH_EXERCISES.length} exercises`, icon: 'wind' },
   { key: 'eat', title: 'Eat', subtitle: `${RECIPES.length} recipes`, icon: 'bowl' },
@@ -301,15 +268,10 @@ export const RESET_CATEGORIES: readonly ResetCategory[] = [
   { key: 'skin', title: "Today's skin routine", subtitle: 'Morning and evening checklist', icon: 'drop' },
 ];
 
-/** Where each category opens. */
 export function categoryPath(key: ResetCategoryKey): { pathname: string; params?: Record<string, string> } {
   return key === 'skin' ? { pathname: '/reset-skin-routine' } : { pathname: '/reset-category', params: { key } };
 }
 
-/**
- * Which Reset list a rule's base variable points to, for the "Try" button on
- * a rule's page. Variables with nothing useful to suggest are left out.
- */
 const VARIABLE_CATEGORY: Partial<Record<string, ResetCategoryKey>> = {
   stress: 'breath',
   sleep_hours: 'move',

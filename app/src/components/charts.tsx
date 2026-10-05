@@ -1,12 +1,4 @@
-/**
- * Charts, hand-rolled on react-native-svg (REQUIREMENTS §5.1, §11).
- *
- * §11.5 applies throughout: no red, no alarm iconography, and colour never
- * carries meaning on its own — every band, direction and state is paired with
- * a text label or an accessibility label.
- */
-
-import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -15,46 +7,28 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import Svg, {
-  Circle,
-  Defs,
-  G,
-  Line,
-  LinearGradient,
-  Path,
-  Rect,
-  Stop,
-} from 'react-native-svg';
+import Svg, { Circle, G, Line, Path, Rect } from 'react-native-svg';
 
 import { useTheme } from '../hooks/useTheme';
 import { radius, severityWord, spacing, type Gradient, type Palette } from '../theme';
 import { formatShort } from '../utils/dates';
-import { GradientFill } from './gradient';
 import { PressableScale } from './motion';
 import { Txt } from './primitives';
-
-// --------------------------------------------------------------------------
-// Trend
-// --------------------------------------------------------------------------
 
 export interface TrendPoint {
   date: string;
   value: number | null;
 }
 
-/**
- * Severity over time, as a line with a gradient wash beneath it.
- *
- * Gaps stay gaps: consecutive logged days are joined, missing days break the
- * line rather than being bridged by one that implies data we do not have.
- */
-/** Nearest sample to a touch, for the scrubber. Pure, so it is testable. */
+const TREND_INSET = 7;
+
 export function nearestIndex(x: number, width: number, count: number): number {
   if (count <= 1 || width <= 0) return 0;
   const step = width / (count - 1);
   return Math.min(count - 1, Math.max(0, Math.round(x / step)));
 }
 
+// Line chart of scores. Touch or drag to see one day.
 export function TrendChart({
   points,
   height = 96,
@@ -62,29 +36,27 @@ export function TrendChart({
   gradient,
   showDots = true,
   interactive = false,
-  describe = (value: number) => `${value} · ${severityWord(value)}`,
+  describe = (value: number) => `${value} (${severityWord(value)})`,
 }: {
   points: readonly TrendPoint[];
   height?: number;
   max?: number;
   gradient?: Gradient;
   showDots?: boolean;
-  /** Touch or drag to read individual days; the reading persists after release. */
   interactive?: boolean;
-  /** How a value reads in the scrubber tooltip. Defaults to severity wording. */
   describe?: (value: number) => string;
 }): React.ReactElement {
   const { palette } = useTheme();
   const [width, setWidth] = React.useState(0);
   const [selected, setSelected] = useState<number | null>(null);
-  const fillId = useId().replace(/:/g, '');
-  const lineId = useId().replace(/:/g, '');
   const ramp = gradient ?? palette.gradients.trend;
+  const ink = ramp.to;
 
-  // Room above the line for the readout when the chart is interactive.
-  const top = interactive ? 34 : 10;
+  const top = interactive ? 40 : 12;
   const bottom = height - 14;
-  const step = points.length > 1 ? width / (points.length - 1) : 0;
+  const inset = TREND_INSET;
+  const plotWidth = Math.max(0, width - inset * 2);
+  const step = points.length > 1 ? plotWidth / (points.length - 1) : 0;
   const yFor = (value: number): number => bottom - (value / max) * (bottom - top);
 
   const widthRef = useRef(0);
@@ -94,7 +66,11 @@ export function TrendChart({
 
   const responder = useMemo(() => {
     const scrub = (x: number): void => {
-      const index = nearestIndex(x, widthRef.current, countRef.current);
+      const index = nearestIndex(
+        x - TREND_INSET,
+        Math.max(0, widthRef.current - TREND_INSET * 2),
+        countRef.current,
+      );
       if (index !== selectedRef.current) {
         selectedRef.current = index;
         setSelected(index);
@@ -109,10 +85,6 @@ export function TrendChart({
     });
   }, [interactive]);
 
-  // A new data window invalidates the selection. Keyed on content, not array
-  // identity: callers map fresh arrays on every render, and an identity key
-  // would reset the selection in response to the very re-render selecting
-  // something causes.
   const signature = points.map((p) => `${p.date}:${p.value ?? ''}`).join('|');
   useEffect(() => {
     selectedRef.current = null;
@@ -128,7 +100,7 @@ export function TrendChart({
     let startX = 0;
 
     points.forEach((point, index) => {
-      const x = index * step;
+      const x = inset + index * step;
       if (point.value === null) {
         if (line) {
           segs.push(line);
@@ -151,7 +123,7 @@ export function TrendChart({
     });
 
     if (line) {
-      const endX = (points.length - 1) * step;
+      const endX = inset + (points.length - 1) * step;
       segs.push(line);
       ars.push(`${area} L ${endX} ${bottom} L ${startX} ${bottom} Z`);
     }
@@ -159,7 +131,7 @@ export function TrendChart({
   }, [points, step, bottom, top, max, width]);
 
   const active = selected !== null && selected < points.length ? points[selected] : null;
-  const activeX = selected !== null ? selected * step : 0;
+  const activeX = selected !== null ? inset + selected * step : 0;
   const tooltipWidth = 132;
   const tooltipLeft = Math.min(Math.max(activeX - tooltipWidth / 2, 0), Math.max(width - tooltipWidth, 0));
 
@@ -181,26 +153,17 @@ export function TrendChart({
     >
       {width > 0 ? (
         <Svg width={width} height={height} pointerEvents="none">
-          <Defs>
-            <LinearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor={ramp.from} stopOpacity={0.32} />
-              <Stop offset="1" stopColor={ramp.from} stopOpacity={0} />
-            </LinearGradient>
-            <LinearGradient id={lineId} x1="0" y1="0" x2="1" y2="0">
-              <Stop offset="0" stopColor={ramp.from} />
-              <Stop offset="1" stopColor={ramp.to} />
-            </LinearGradient>
-          </Defs>
+          <Line x1={0} y1={bottom} x2={width} y2={bottom} stroke={palette.border} strokeWidth={1} />
 
           {areas.map((d, i) => (
-            <Path key={`a${i}`} d={d} fill={`url(#${fillId})`} />
+            <Path key={`a${i}`} d={d} fill={ink} fillOpacity={0.1} />
           ))}
           {segments.map((d, i) => (
             <Path
               key={`s${i}`}
               d={d}
-              stroke={`url(#${lineId})`}
-              strokeWidth={2.6}
+              stroke={ink}
+              strokeWidth={2.4}
               fill="none"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -212,15 +175,14 @@ export function TrendChart({
                   key={`d${i}`}
                   cx={dot.x}
                   cy={dot.y}
-                  r={dot.last ? 5 : 2.6}
-                  fill={dot.last ? ramp.to : palette.surface}
-                  stroke={ramp.to}
+                  r={dot.last ? 5.5 : 3.4}
+                  fill={dot.last ? ink : palette.surface}
+                  stroke={ink}
                   strokeWidth={dot.last ? 0 : 2}
                 />
               ))
             : null}
 
-          {/* Scrubber: a dashed guide line down to the axis and a ring on the sample. */}
           {active ? (
             <G>
               <Line
@@ -230,20 +192,17 @@ export function TrendChart({
                 y2={bottom}
                 stroke={palette.borderStrong}
                 strokeWidth={1.2}
-                strokeDasharray="3 3"
+                strokeDasharray="3 4"
               />
               {active.value !== null ? (
-                <>
-                  <Circle cx={activeX} cy={yFor(active.value)} r={9} fill={ramp.to} opacity={0.18} />
-                  <Circle
-                    cx={activeX}
-                    cy={yFor(active.value)}
-                    r={5}
-                    fill={palette.surface}
-                    stroke={ramp.to}
-                    strokeWidth={2.4}
-                  />
-                </>
+                <Circle
+                  cx={activeX}
+                  cy={yFor(active.value)}
+                  r={6}
+                  fill={palette.surface}
+                  stroke={ink}
+                  strokeWidth={2.6}
+                />
               ) : null}
             </G>
           ) : null}
@@ -265,7 +224,7 @@ export function TrendChart({
             paddingHorizontal: spacing.sm,
           }}
         >
-          <Txt variant="micro" tone="faint" style={{ textTransform: 'uppercase' }}>
+          <Txt variant="caption" tone="faint">
             {formatShort(active.date)}
           </Txt>
           <Txt variant="label" style={{ color: active.value === null ? palette.textFaint : palette.text }}>
@@ -283,7 +242,6 @@ export function TrendChart({
   );
 }
 
-/** Fourteen cells showing which of the trailing days carry a check-in. */
 export function DayRibbon({
   days,
   height = 34,
@@ -292,29 +250,29 @@ export function DayRibbon({
   height?: number;
 }): React.ReactElement {
   const { palette } = useTheme();
+  const dot = Math.min(height, 18);
   return (
     <View
-      style={{ flexDirection: 'row', gap: 3, height }}
+      style={{ flexDirection: 'row', alignItems: 'center', height }}
       accessibilityLabel={`${days.filter((d) => d.logged).length} of ${days.length} recent days logged`}
     >
       {days.map((day) => (
-        <View
-          key={day.date}
-          style={{
-            flex: 1,
-            borderRadius: 4,
-            backgroundColor: day.logged ? palette.primary : palette.surfaceAlt,
-            opacity: day.logged ? 1 : 0.9,
-          }}
-        />
+        <View key={day.date} style={{ flex: 1, alignItems: 'center' }}>
+          <View
+            style={{
+              width: dot,
+              height: dot,
+              borderRadius: dot / 2,
+              backgroundColor: day.logged ? palette.primary : 'transparent',
+              borderWidth: day.logged ? 0 : 1.5,
+              borderColor: palette.borderStrong,
+            }}
+          />
+        </View>
       ))}
     </View>
   );
 }
-
-// --------------------------------------------------------------------------
-// Insights — diverging bars
-// --------------------------------------------------------------------------
 
 export interface FactorBar {
   name: string;
@@ -323,14 +281,6 @@ export interface FactorBar {
   direction: 'increases' | 'decreases';
 }
 
-/**
- * Coefficients as a diverging chart around a shared centre line.
- *
- * Left-aligned bars forced the reader to check a text label to learn which way
- * a factor pushed. Diverging from a centre makes direction structural — you
- * see it before you read it — while the words stay for anyone who cannot
- * distinguish the colours (§11.5).
- */
 export function DivergingBars({
   bars,
   onSelect,
@@ -367,10 +317,6 @@ export function DivergingBars({
             scaleTo={0.985}
             style={{ minHeight: 46, justifyContent: 'center' }}
           >
-            {/* Direction sits inline with the label rather than on its own
-                line. Which side of the centre a bar falls on already carries
-                it structurally, and the row's accessibility label states it
-                outright — so a third repetition only cost vertical rhythm. */}
             <View
               style={{
                 flexDirection: 'row',
@@ -434,22 +380,13 @@ function Bar({
         width,
         height: 12,
         borderRadius: 6,
-        overflow: 'hidden',
+        backgroundColor: gradient.from,
         alignSelf: align === 'right' ? 'flex-end' : 'flex-start',
       }}
-    >
-      <GradientFill gradient={gradient} angle="horizontal" />
-    </Animated.View>
+    />
   );
 }
 
-/**
- * Where a factor's effect typically lands, on a 0-21 day axis.
- *
- * §7.4 documents each trigger's latency and Fleur caps its lookback at
- * 14 days. Drawing both makes the sore-throat case honest: its window runs
- * past the edge of what Fleur can see.
- */
 export function LagTimeline({
   from,
   to,
@@ -508,31 +445,21 @@ export function LagTimeline({
   );
 }
 
-// --------------------------------------------------------------------------
-// History — month calendar
-// --------------------------------------------------------------------------
-
 const WEEKDAY_HEADERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-/** Heat colour for a 0-10 skin severity; unlogged days get the plain surface. */
 export function severityColor(severity: number | null, palette: Palette): string {
   if (severity === null) return palette.surfaceAlt;
   const index = Math.min(palette.heat.length - 1, Math.floor((severity / 10) * palette.heat.length));
   return palette.heat[index];
 }
 
-/**
- * One month as a normal wall calendar (Sunday first), each day a big square
- * coloured by skin severity with its date inside. Future days are faded and
- * not tappable.
- */
+// One month, with each logged day colored by how bad the skin was.
 export function MonthCalendar({
   month,
   severities,
   today,
   onSelect,
 }: {
-  /** Any date in the month to show, 'YYYY-MM-DD'. */
   month: string;
   severities: ReadonlyMap<string, number | null>;
   today: string;
@@ -579,10 +506,11 @@ export function MonthCalendar({
                 style={{
                   flex: 1,
                   aspectRatio: 1,
-                  borderRadius: radius.sm,
+                  borderRadius: radius.pill,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  backgroundColor: future ? 'transparent' : severityColor(severity, palette),
+                  backgroundColor:
+                    future || severity === null ? 'transparent' : severityColor(severity, palette),
                   borderWidth: isToday ? 2 : 0,
                   borderColor: palette.primary,
                   opacity: future ? 0.35 : 1,
@@ -603,7 +531,6 @@ export function MonthCalendar({
   );
 }
 
-/** Colour key for the calendar: 0 to 10, plus "not logged". */
 export function SeverityLegend({ style }: { style?: StyleProp<ViewStyle> }): React.ReactElement {
   const { palette } = useTheme();
   return (
@@ -612,9 +539,9 @@ export function SeverityLegend({ style }: { style?: StyleProp<ViewStyle> }): Rea
         <Txt variant="caption" tone="muted">
           0 Clear
         </Txt>
-        <View style={{ flex: 1, flexDirection: 'row', gap: 3 }}>
+        <View style={{ flex: 1, flexDirection: 'row', gap: 4 }}>
           {palette.heat.map((color) => (
-            <View key={color} style={{ flex: 1, height: 14, borderRadius: 4, backgroundColor: color }} />
+            <View key={color} style={{ flex: 1, height: 14, borderRadius: 7, backgroundColor: color }} />
           ))}
         </View>
         <Txt variant="caption" tone="muted">
@@ -626,10 +553,9 @@ export function SeverityLegend({ style }: { style?: StyleProp<ViewStyle> }): Rea
           style={{
             width: 14,
             height: 14,
-            borderRadius: 4,
-            backgroundColor: palette.surfaceAlt,
-            borderWidth: 1,
-            borderColor: palette.border,
+            borderRadius: 7,
+            borderWidth: 1.5,
+            borderColor: palette.borderStrong,
           }}
         />
         <Txt variant="caption" tone="muted">
@@ -640,7 +566,6 @@ export function SeverityLegend({ style }: { style?: StyleProp<ViewStyle> }): Rea
   );
 }
 
-/** Small inline ring used for compact progress readouts. */
 export function MiniRing({
   fraction,
   size = 44,
@@ -676,15 +601,6 @@ export function MiniRing({
 export { radius as chartRadius };
 export type { Palette as ChartPalette };
 
-// --------------------------------------------------------------------------
-// Rule history
-// --------------------------------------------------------------------------
-
-/**
- * One rule's points, day by day — a big, plain line for the rule detail page.
- * The dashed line on top is the most the rule can ever add, so "how close to
- * full" reads without any numbers. Missing days break the line.
- */
 export function RuleChart({
   points,
   max,
@@ -692,25 +608,23 @@ export function RuleChart({
   height = 220,
 }: {
   points: readonly TrendPoint[];
-  /** The rule's maximum, as a positive number. */
   max: number;
   color: string;
   height?: number;
 }): React.ReactElement {
   const { palette } = useTheme();
   const [width, setWidth] = useState(0);
-  const fillId = useId().replace(/:/g, '');
-
   const axis = 34;
-  const plotWidth = Math.max(0, width - axis);
+  const plotWidth = Math.max(0, width - axis - 7);
   const top = 12;
   const bottom = height - 26;
   const step = points.length > 1 ? plotWidth / (points.length - 1) : 0;
   const yFor = (value: number): number => bottom - (Math.min(value, max) / max) * (bottom - top);
 
-  const { segments, areas, last } = useMemo(() => {
+  const { segments, areas, last, dots } = useMemo(() => {
     const segs: string[] = [];
     const ars: string[] = [];
+    const ds: { x: number; y: number }[] = [];
     let line = '';
     let startX = 0;
     let prevX = 0;
@@ -736,38 +650,36 @@ export function RuleChart({
       }
       prevX = x;
       lastDot = { x, y };
+      ds.push({ x, y });
     });
     close();
-    return { segments: segs, areas: ars, last: lastDot as { x: number; y: number } | null };
+    return { segments: segs, areas: ars, last: lastDot as { x: number; y: number } | null, dots: ds };
   }, [points, step, max, bottom]);
 
   return (
     <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ height }}>
       {width > 0 ? (
         <Svg width={width} height={height}>
-          <Defs>
-            <LinearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor={color} stopOpacity={0.28} />
-              <Stop offset="1" stopColor={color} stopOpacity={0} />
-            </LinearGradient>
-          </Defs>
-          <Line x1={axis} y1={top} x2={width} y2={top} stroke={palette.borderStrong} strokeDasharray="4 4" />
+          <Line x1={axis} y1={top} x2={width} y2={top} stroke={palette.borderStrong} strokeDasharray="5 5" />
           <Line x1={axis} y1={bottom} x2={width} y2={bottom} stroke={palette.border} />
           {areas.map((d, i) => (
-            <Path key={`a${i}`} d={d} fill={`url(#${fillId})`} />
+            <Path key={`a${i}`} d={d} fill={color} fillOpacity={0.1} />
           ))}
           {segments.map((d, i) => (
             <Path
               key={`s${i}`}
               d={d}
               stroke={color}
-              strokeWidth={3}
+              strokeWidth={2.6}
               fill="none"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
           ))}
-          {last ? <Circle cx={last.x} cy={last.y} r={6} fill={color} /> : null}
+          {dots.map((dot, i) => (
+            <Circle key={`d${i}`} cx={dot.x} cy={dot.y} r={3} fill={palette.surface} stroke={color} strokeWidth={1.8} />
+          ))}
+          {last ? <Circle cx={last.x} cy={last.y} r={5.5} fill={color} /> : null}
         </Svg>
       ) : null}
       <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: top - 8 }}>

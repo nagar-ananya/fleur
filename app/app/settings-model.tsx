@@ -1,13 +1,7 @@
-/**
- * Settings → Scoring & disclaimer. Says plainly that the points were chosen
- * for this project, lists every rule's points and the bands, and carries the
- * full disclaimer.
- */
-
 import React from 'react';
 import { View } from 'react-native';
 
-import { Card, Kicker, Screen, Txt } from '../src/components/primitives';
+import { Card, Kicker, NumberCircle, Screen, Txt } from '../src/components/primitives';
 import { DISCLAIMER_FULL } from '../src/constants/copy';
 import { rulebook } from '../src/hooks/appState';
 import { ruleNumber } from '../src/logic/rulebook';
@@ -21,7 +15,7 @@ export default function SettingsModelScreen(): React.ReactElement {
   return (
     <Screen aurora={false} edges={[]} contentStyle={{ paddingBottom: 100 }}>
       <Txt tone="muted" style={{ lineHeight: 22 }}>
-        {`Fleur's score is a made-up points system for this project. Each of the ${rulebook.rules.length} rules can add up to a set number of points; add them up and you get your score, from 0 to 100.`}
+        {`Fleur's score is a simple points system made for this project. Each of the ${rulebook.rules.length} rules can add up to a set number of points. Add them up and you get your score, from 0 to 100.`}
       </Txt>
 
       <Card style={{ marginTop: spacing.xl }}>
@@ -41,9 +35,7 @@ export default function SettingsModelScreen(): React.ReactElement {
               borderBottomColor: palette.border,
             }}
           >
-            <Txt variant="caption" tone="faint" style={{ width: 20 }}>
-              {ruleNumber(rule.id)}
-            </Txt>
+            <NumberCircle value={ruleNumber(rule.id)} size={24} />
             <Txt style={{ flex: 1 }}>{rule.label}</Txt>
             <Txt variant="label" style={{ color: rule.points > 0 ? palette.bandHighText : palette.bandLowText }}>
               {rule.points > 0 ? `up to +${rule.points}` : `up to −${-rule.points}`}
@@ -51,7 +43,7 @@ export default function SettingsModelScreen(): React.ReactElement {
           </View>
         ))}
         <Txt tone="muted" style={{ marginTop: spacing.md, lineHeight: 21 }}>
-          {`Under ${bands.elevated} is Low, ${bands.elevated}–${bands.high - 1} is Elevated, ${bands.high} and up is High.`}
+          {`Under ${bands.elevated} is Low, ${bands.elevated}-${bands.high - 1} is Elevated, ${bands.high} and up is High.`}
         </Txt>
       </Card>
 

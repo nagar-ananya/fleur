@@ -1,14 +1,3 @@
-/**
- * A small per-day checklist backed by the `meta` table.
- *
- * Wind-down and skin-routine ticks are real user state worth remembering for
- * the rest of the day, but they are not check-in data — ticking a step here
- * does not log medication adherence, that lives in the check-in where the
- * model reads it (see `SKIN_PM_STEPS`). Storing them in `meta` under a
- * date-scoped key keeps that boundary: a fresh key appears each day, and
- * nothing here ever reaches `loadFeatureInputRows`.
- */
-
 import { useCallback, useEffect, useState } from 'react';
 
 import { getMeta, setMeta } from '../db/queries';

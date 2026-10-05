@@ -1,10 +1,3 @@
-/**
- * Layout and typography primitives.
- *
- * Small and local by design — §11.5 rules out pulling in a component library,
- * and everything here is a handful of lines over React Native's own views.
- */
-
 import React from 'react';
 import {
   ScrollView,
@@ -21,7 +14,6 @@ import { DISCLAIMER_SHORT } from '../constants/copy';
 import { useTheme } from '../hooks/useTheme';
 import {
   MIN_TOUCH_TARGET,
-  elevation,
   radius,
   spacing,
   typography,
@@ -30,10 +22,6 @@ import {
 } from '../theme';
 import { AuroraBackdrop, GradientFill } from './gradient';
 import { PressableScale } from './motion';
-
-// --------------------------------------------------------------------------
-// Screen
-// --------------------------------------------------------------------------
 
 export function Screen({
   children,
@@ -74,10 +62,6 @@ export function Screen({
     </View>
   );
 }
-
-// --------------------------------------------------------------------------
-// Text
-// --------------------------------------------------------------------------
 
 type TextVariant = keyof typeof typography;
 type Tone = 'default' | 'muted' | 'faint' | 'accent' | 'onAccent';
@@ -128,10 +112,9 @@ export function Txt({
   );
 }
 
-/** Small all-caps kicker above a heading. */
 export function Kicker({
   children,
-  tone = 'faint',
+  tone = 'muted',
   style,
 }: {
   children: React.ReactNode;
@@ -139,9 +122,31 @@ export function Kicker({
   style?: StyleProp<TextStyle>;
 }): React.ReactElement {
   return (
-    <Txt variant="micro" tone={tone} style={[{ textTransform: 'uppercase' }, style]}>
+    <Txt variant="caption" tone={tone} style={[{ fontWeight: '600' }, style]}>
       {children}
     </Txt>
+  );
+}
+
+export function ScreenTitle({
+  kicker,
+  title,
+  subtitle,
+}: {
+  kicker?: string;
+  title: string;
+  subtitle?: string;
+}): React.ReactElement {
+  return (
+    <View>
+      {kicker ? <Kicker style={{ marginBottom: 2 }}>{kicker}</Kicker> : null}
+      <Txt variant="display">{title}</Txt>
+      {subtitle ? (
+        <Txt tone="muted" style={{ marginTop: spacing.xs, lineHeight: 22 }}>
+          {subtitle}
+        </Txt>
+      ) : null}
+    </View>
   );
 }
 
@@ -168,15 +173,10 @@ export function SectionHeading({
   );
 }
 
-// --------------------------------------------------------------------------
-// Surfaces
-// --------------------------------------------------------------------------
-
 export function Card({
   children,
   style,
   padded = true,
-  level = 1,
   tone = 'surface',
 }: {
   children: React.ReactNode;
@@ -199,11 +199,8 @@ export function Card({
         {
           backgroundColor: background,
           borderRadius: radius.xl,
-          borderWidth: StyleSheet.hairlineWidth,
-          borderColor: palette.border,
           padding: padded ? spacing.lg : 0,
         },
-        elevation(palette, level),
         style,
       ]}
     >
@@ -212,7 +209,6 @@ export function Card({
   );
 }
 
-/** Card whose background is a gradient; children should use `onAccent` text. */
 export function FeatureCard({
   children,
   gradient,
@@ -224,24 +220,13 @@ export function FeatureCard({
   style?: StyleProp<ViewStyle>;
   padded?: boolean;
 }): React.ReactElement {
-  const { palette } = useTheme();
   return (
-    <View
-      style={[
-        { borderRadius: radius.xl, overflow: 'hidden' },
-        elevation(palette, 2),
-        style,
-      ]}
-    >
+    <View style={[{ borderRadius: radius.xl, overflow: 'hidden' }, style]}>
       <GradientFill gradient={gradient} />
       <View style={{ padding: padded ? spacing.lg : 0 }}>{children}</View>
     </View>
   );
 }
-
-// --------------------------------------------------------------------------
-// Controls
-// --------------------------------------------------------------------------
 
 export function Button({
   label,
@@ -268,11 +253,13 @@ export function Button({
         : palette.text;
 
   const background =
-    variant === 'secondary'
-      ? palette.surfaceAlt
-      : variant === 'destructive'
-        ? palette.destructiveSoft
-        : 'transparent';
+    variant === 'primary'
+      ? palette.primary
+      : variant === 'secondary'
+        ? palette.surfaceAlt
+        : variant === 'destructive'
+          ? palette.destructiveSoft
+          : 'transparent';
 
   return (
     <PressableScale
@@ -283,35 +270,26 @@ export function Button({
       style={[
         {
           minHeight: MIN_TOUCH_TARGET + 6,
-          borderRadius: radius.pill,
-          overflow: 'hidden',
-          justifyContent: 'center',
-          backgroundColor: background,
-          borderWidth: variant === 'quiet' ? StyleSheet.hairlineWidth : 0,
-          borderColor: palette.borderStrong,
-        },
-        style,
-      ]}
-    >
-      {variant === 'primary' ? <GradientFill gradient={palette.gradients.primary} /> : null}
-      <View
-        style={{
+          borderRadius: radius.md,
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'center',
           gap: spacing.sm,
           paddingHorizontal: spacing.lg,
           paddingVertical: spacing.md,
-        }}
-      >
-        {icon}
-        <Text style={[typography.label, { color: labelColor, fontSize: 16 }]}>{label}</Text>
-      </View>
+          backgroundColor: background,
+          borderWidth: variant === 'quiet' ? 1 : 0,
+          borderColor: palette.borderStrong,
+        },
+        style,
+      ]}
+    >
+      {icon}
+      <Text style={[typography.label, { color: labelColor, fontSize: 16 }]}>{label}</Text>
     </PressableScale>
   );
 }
 
-/** Small status pill. Always carries text — never colour alone (§11.5). */
 export function Pill({
   label,
   color,
@@ -336,18 +314,17 @@ export function Pill({
           backgroundColor: background,
           borderRadius: radius.pill,
           paddingHorizontal: spacing.md,
-          paddingVertical: 6,
+          paddingVertical: 4,
         },
         style,
       ]}
     >
-      {icon ?? <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: color }} />}
-      <Text style={[typography.caption, { color, fontWeight: '600' }]}>{label}</Text>
+      {icon}
+      <Text style={[typography.caption, { color, fontWeight: '700' }]}>{label}</Text>
     </View>
   );
 }
 
-/** Compact metric tile, used in bento rows. */
 export function StatTile({
   value,
   label,
@@ -370,7 +347,6 @@ export function StatTile({
   );
 }
 
-/** A round tinted badge behind an icon. */
 export function IconBadge({
   children,
   background,
@@ -396,6 +372,36 @@ export function IconBadge({
   );
 }
 
+export function NumberCircle({
+  value,
+  size = 30,
+  color,
+  background,
+}: {
+  value: number | string;
+  size?: number;
+  color?: string;
+  background?: string;
+}): React.ReactElement {
+  const { palette } = useTheme();
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: background ?? palette.primarySoft,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Text style={[typography.label, { fontSize: size * 0.46, color: color ?? palette.primary }]}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 export function Divider({ style }: { style?: StyleProp<ViewStyle> }): React.ReactElement {
   const { palette } = useTheme();
   return (
@@ -408,7 +414,6 @@ export function Divider({ style }: { style?: StyleProp<ViewStyle> }): React.Reac
   );
 }
 
-/** FR-4.6: required on every screen that displays a risk value. */
 export function ShortDisclaimer({ style }: { style?: StyleProp<ViewStyle> }): React.ReactElement {
   const { palette } = useTheme();
   return (

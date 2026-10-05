@@ -1,11 +1,3 @@
-/**
- * Settings (REQUIREMENTS §11.1, FR-7.x) — v2 redesign.
- *
- * A list of sub-pages (Profile, Export, AI second opinion, Scoring &
- * disclaimer, Delete all data), plus "Clear today's check-in" and the hidden
- * developer tools.
- */
-
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, View } from 'react-native';
@@ -14,12 +6,14 @@ import {
   ChevronRight,
   CloseIcon,
   ExportIcon,
+  FlaskIcon,
+  NotebookIcon,
   PersonIcon,
   SparkIcon,
   TrashIcon,
 } from '../../src/components/icons';
 import { PressableScale, Reveal } from '../../src/components/motion';
-import { Card, IconBadge, Kicker, Screen, Txt } from '../../src/components/primitives';
+import { Card, IconBadge, Screen, ScreenTitle, Txt } from '../../src/components/primitives';
 import { countCheckInDays, deleteCheckIn, getMeta, setMeta } from '../../src/db/queries';
 import {
   DEFAULT_SEED_DAYS,
@@ -37,7 +31,7 @@ const ROWS = [
   { key: 'profile', title: 'Profile', icon: PersonIcon, path: '/settings-profile' as const, destructive: false },
   { key: 'export', title: 'Export', icon: ExportIcon, path: '/settings-export' as const, destructive: false },
   { key: 'ai', title: 'AI second opinion', icon: SparkIcon, path: '/settings-ai' as const, destructive: false },
-  { key: 'model', title: 'Scoring & disclaimer', icon: SparkIcon, path: '/settings-model' as const, destructive: false },
+  { key: 'model', title: 'Scoring & disclaimer', icon: NotebookIcon, path: '/settings-model' as const, destructive: false },
   { key: 'delete', title: 'Delete all data', icon: TrashIcon, path: '/settings-delete' as const, destructive: true },
 ] as const;
 
@@ -60,7 +54,6 @@ export default function SettingsScreen(): React.ReactElement {
     });
   }, [db]);
 
-  /** Tapping the footer `DEV_MODE_TAPS` times in quick succession toggles developer mode. */
   const onFooterTap = (): void => {
     const now = Date.now();
     const t = taps.current;
@@ -77,7 +70,7 @@ export default function SettingsScreen(): React.ReactElement {
   const confirmSeed = (): void => {
     Alert.alert(
       `Seed ${DEFAULT_SEED_DAYS} days of demo data?`,
-      `This replaces any check-ins from the last ${DEFAULT_SEED_DAYS} days, including today.`,
+      `This replaces any check-ins from the ${DEFAULT_SEED_DAYS} days before today.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Seed', style: 'destructive', onPress: () => void onSeed() },
@@ -89,22 +82,21 @@ export default function SettingsScreen(): React.ReactElement {
     switch (key) {
       case 'profile':
         return profile
-          ? `${profile.psoriasisType} · ${profile.onSystemic ? 'on a biologic' : 'topicals only'}`
+          ? `${profile.psoriasisType}, ${profile.onSystemic ? 'on a biologic' : 'topicals only'}`
           : undefined;
       case 'export':
         return `Save your ${days} check-${days === 1 ? 'in' : 'ins'} as a CSV file`;
       case 'ai':
-        return 'TypeSafe · preview';
+        return 'TypeSafe (preview)';
       case 'model':
         return `How the ${rulebook.rules.length} rules are scored`;
       case 'delete':
-        return 'Irreversible · requires a typed confirmation';
+        return "Can't be undone";
       default:
         return undefined;
     }
   };
 
-  /** Developer mode only; see `src/dev/seed.ts`. */
   const onSeed = async (): Promise<void> => {
     if (!db) return;
     setSeeding(true);
@@ -114,8 +106,8 @@ export default function SettingsScreen(): React.ReactElement {
       setDays(await countCheckInDays(db));
       Alert.alert(
         'Demo data written',
-        `${result.days} days of check-ins from ${result.from} to ${result.to}. ` +
-          'Open Today to see the forecast.',
+        `Added ${result.days} days of check-ins (${result.from} to ${result.to}). ` +
+          'Go to Today to see your score.',
       );
     } catch (error) {
       console.error('[fleur] seeding failed', error);
@@ -158,8 +150,8 @@ export default function SettingsScreen(): React.ReactElement {
         style={{ marginBottom: spacing.sm }}
       >
         <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-          <IconBadge background={row.destructive ? palette.destructiveSoft : palette.surfaceAlt}>
-            <Icon size={18} color={row.destructive ? palette.destructive : palette.textMuted} />
+          <IconBadge background={row.destructive ? palette.destructiveSoft : palette.primarySoft}>
+            <Icon size={19} color={row.destructive ? palette.destructive : palette.primary} />
           </IconBadge>
           <View style={{ flex: 1 }}>
             <Txt variant="label" style={row.destructive ? { color: palette.destructive } : undefined}>
@@ -178,12 +170,9 @@ export default function SettingsScreen(): React.ReactElement {
   };
 
   return (
-    <Screen contentStyle={{ paddingBottom: 120 }}>
+    <Screen contentStyle={{ paddingBottom: spacing.xxxl }}>
       <Reveal>
-        <Kicker>Preferences</Kicker>
-        <Txt variant="display" style={{ marginTop: 4 }}>
-          Settings
-        </Txt>
+        <ScreenTitle kicker="Preferences" title="Settings" />
       </Reveal>
 
       <Reveal delay={70}>
@@ -197,8 +186,8 @@ export default function SettingsScreen(): React.ReactElement {
             style={{ marginBottom: spacing.sm }}
           >
             <Card style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-              <IconBadge background={palette.surfaceAlt}>
-                <CloseIcon size={16} color={palette.textMuted} />
+              <IconBadge background={palette.primarySoft}>
+                <CloseIcon size={16} color={palette.primary} />
               </IconBadge>
               <View style={{ flex: 1 }}>
                 <Txt variant="label">{clearing ? 'Clearing…' : "Clear today's check-in"}</Txt>
@@ -214,16 +203,12 @@ export default function SettingsScreen(): React.ReactElement {
         </View>
       </Reveal>
 
-      {/* Developer mode only (on by default in development builds; toggled by
-          tapping the footer in release). It exists because FR-4.2 hides the
-          forecast until 14 days are logged while FR-2.4 caps back-fill at 7,
-          leaving the risk screens unreachable by hand on a fresh install. */}
       {devMode ? (
         <Reveal delay={130}>
           <Card style={{ marginTop: spacing.md, borderStyle: 'dashed', borderWidth: 1.5 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
               <IconBadge background={palette.aquaSoft}>
-                <SparkIcon size={18} color={palette.aqua} />
+                <FlaskIcon size={18} color={palette.aqua} />
               </IconBadge>
               <View style={{ flex: 1 }}>
                 <Txt variant="heading">Developer tools</Txt>
@@ -245,7 +230,7 @@ export default function SettingsScreen(): React.ReactElement {
 
       <Pressable onPress={onFooterTap} style={{ marginTop: spacing.xl, paddingVertical: spacing.sm }}>
         <Txt variant="caption" tone="faint" center>
-          Fleur · experimental research prototype
+          Fleur (experimental prototype)
         </Txt>
       </Pressable>
     </Screen>

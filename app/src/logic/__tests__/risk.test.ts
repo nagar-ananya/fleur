@@ -7,7 +7,6 @@ import { addDays } from '../../utils/dates';
 
 const START = '2026-01-01';
 
-/** `severities` may contain null to mean "no check-in that day". */
 function rows(
   severities: (number | null)[],
   extra: Record<string, unknown> = {},
@@ -39,7 +38,6 @@ describe('deriveRiskState', () => {
   });
 
   it('refuses to score when over 40% of the recent fortnight is missing', () => {
-    // 20 logged days, then a long unlogged gap up to today.
     const logged = rows(new Array(20).fill(4));
     const gap: FrameInputRow[] = [{ date: addDays(START, 29), severity: null }];
     const state = deriveRiskState([...logged, ...gap], rulebook);
